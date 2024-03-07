@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use eframe::App;
+use egui::Sense;
 use egui_extras::{Column, TableBuilder};
 use task_manager::{
     display_error_message, fetch_proc_name, get_memory_usage, get_process_list, get_self_proc_id,
@@ -111,8 +112,11 @@ impl App for TaskManager {
                             );
                         });
                 });
+                
+                ui.label(format!("Process count: {}", self.current_process_list.len()));
 
             });
+
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -187,6 +191,12 @@ impl App for TaskManager {
                                     ui.label(format!("{}", proc_attributes.th32ProcessID))
                                 });
                             });
+
+                            //returns response
+                            if row.response().interact(Sense::click()).clicked() {
+                                println!("asd {}", row.col_index());
+                            }
+
                         });
                     }
                 });
