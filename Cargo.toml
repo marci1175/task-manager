@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.80"
+anyhow = {version = "1.0.80", features = ["backtrace"]}
+chrono = "0.4.35"
 eframe = { version = "0.26.2", default-features = false, features = [
     "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
@@ -14,6 +15,8 @@ eframe = { version = "0.26.2", default-features = false, features = [
 egui = "0.26.2"
 egui_extras = "0.26.2"
 serde = "1.0.197"
+winapi = { version = "0.3.9", features = ["psapi", "processthreadsapi"] }
+
 
 [dependencies.windows]
 version = "0.54.0"
@@ -25,5 +28,6 @@ features = [
     "Win32_UI_WindowsAndMessaging",
     "Foundation_Diagnostics",
     "Win32_System_Diagnostics_ToolHelp",
-    "Win32_System_ProcessStatus"
+    "Win32_System_ProcessStatus",
+    "Win32_System_Time"
 ]

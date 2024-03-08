@@ -1,30 +1,46 @@
 use std::fmt::Display;
+use std::mem;
+use std::time::Duration;
 
-use windows::Win32::Foundation::CloseHandle;
-use windows::Win32::Security::{SE_DEBUG_NAME, TOKEN_WRITE_OWNER};
-use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Toolhelp32ReadProcessMemory, TH32CS_SNAPPROCESS,
-};
+use winapi::um::winnt::ULARGE_INTEGER;
+use windows::Win32::Foundation::{CloseHandle, FILETIME, SYSTEMTIME};
+use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, TH32CS_SNAPPROCESS};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
-use windows::Win32::System::Threading::{
-    GetProcessWorkingSetSize, OpenProcess, PROCESS_ALL_ACCESS, PROCESS_READ_CONTROL,
-    PROCESS_VM_OPERATION, SYNCHRONIZATION_READ_CONTROL,
-};
+use windows::Win32::System::Threading::{GetProcessTimes, OpenProcess, PROCESS_ALL_ACCESS};
+use windows::Win32::System::Time::{FileTimeToSystemTime};
 use windows::{
     core::PCWSTR,
     Win32::{
-        Foundation::{HANDLE, HWND},
+        Foundation::HANDLE,
         System::{
             Diagnostics::ToolHelp::{Process32FirstW, Process32NextW, PROCESSENTRY32W},
             ProcessStatus::PROCESS_MEMORY_COUNTERS,
-            Threading::{
-                GetCurrentProcess, GetCurrentProcessId, GetProcessId, QueryFullProcessImageNameW,
-                PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
-            },
+            Threading::{GetCurrentProcess, GetProcessId},
         },
         UI::WindowsAndMessaging::{MessageBoxW, HWND_DESKTOP, MB_ICONERROR},
     },
 };
+
+#[derive(Debug, Clone)]
+pub struct ProcessAttributes {
+    pub process_memory: PROCESS_MEMORY_COUNTERS,
+    pub process_cpu_info: CpuTime,
+    pub process: PROCESSENTRY32W,
+}
+
+impl ProcessAttributes {
+    pub fn new(
+        process_memory: PROCESS_MEMORY_COUNTERS,
+        process_cpu_info: CpuTime,
+        process: PROCESSENTRY32W,
+    ) -> Self {
+        Self {
+            process_memory,
+            process_cpu_info,
+            process,
+        }
+    }
+}
 
 pub fn get_self_proc_id() -> u32 {
     unsafe { GetProcessId(GetCurrentProcess()) }
@@ -41,33 +57,30 @@ fn create_snapshot() -> Result<HANDLE, windows::core::Error> {
     unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }
 }
 
-fn get_proc_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<PROCESSENTRY32W>> {
-    let mut proc_list: Vec<PROCESSENTRY32W> = Vec::new();
-
-    unsafe {
-        let mut pe32 = alloc_proc_entry();
-
-        Process32FirstW(hsnapshot, &mut pe32)?;
-        while let Ok(_) = Process32NextW(hsnapshot, &mut pe32) {
-            proc_list.push(pe32);
-        }
-    }
-
-    Ok(proc_list)
+#[derive(Debug, Clone)]
+pub struct CpuTime {
+    pub cpu_time_user: Duration,
+    pub cpu_time_kernel: Duration,
 }
 
-pub fn get_memory_usage(pid: u32) -> anyhow::Result<usize> {
+fn get_cpu_times(process_handle: HANDLE) -> anyhow::Result<CpuTime> {
+    let mut lp_creation_time = FILETIME::default();
+    let mut lp_exit_time = FILETIME::default();
+    let mut lp_kernel_time = FILETIME::default();
+    let mut lp_user_time = FILETIME::default();
+
     unsafe {
-        let process_handle = OpenProcess(PROCESS_ALL_ACCESS, true, pid)?;
-
-        let mut pmc = PROCESS_MEMORY_COUNTERS::default();
-        let cb = std::mem::size_of_val(&pmc) as u32;
-        GetProcessMemoryInfo(process_handle, &mut pmc, cb)?;
-
-        CloseHandle(process_handle)?;
-
-        Ok(pmc.PagefileUsage)
+        //here is where the error appears
+        GetProcessTimes(
+            process_handle,
+            &mut lp_creation_time,
+            &mut lp_exit_time,
+            &mut lp_kernel_time,
+            &mut lp_user_time,
+        )?;
     }
+
+    Ok(CpuTime {cpu_time_kernel: filetime_to_duration(&lp_kernel_time), cpu_time_user: filetime_to_duration(&lp_user_time)})
 }
 
 pub fn display_error_message(
@@ -94,9 +107,9 @@ pub fn display_error_message(
     });
 }
 
-pub fn get_process_list() -> anyhow::Result<Vec<PROCESSENTRY32W>> {
+pub fn get_process_list() -> anyhow::Result<Vec<ProcessAttributes>> {
     let snapshot = create_snapshot()?;
-    let proc_list = get_proc_list(snapshot);
+    let proc_list = get_proc_attr_list(snapshot);
 
     //Close handle
     unsafe {
@@ -115,4 +128,81 @@ pub fn fetch_proc_name(proc_name_raw: [u16; 260]) -> String {
             .collect::<Vec<u8>>(),
     )
     .unwrap()
+}
+
+fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes>> {
+    let mut proc_attr_list: Vec<ProcessAttributes> = Vec::new();
+
+    unsafe {
+        let mut pe32 = alloc_proc_entry();
+
+        while let Ok(_) = Process32NextW(hsnapshot, &mut pe32) {
+            let process_id = pe32.th32ProcessID;
+
+            match OpenProcess(PROCESS_ALL_ACCESS, false, process_id) {
+                Ok(process_handle) => {
+                    let process_memory = get_memory_usage(process_handle)?;
+                    let process_cpu_times = get_cpu_times(process_handle)?;
+
+                    proc_attr_list.push(ProcessAttributes::new(
+                        process_memory,
+                        process_cpu_times,
+                        pe32,
+                    ));
+                }
+                Err(err) => {
+                    dbg!(err);
+                }
+            };
+        }
+    }
+
+    Ok(proc_attr_list)
+}
+
+fn get_memory_usage(process_handle: HANDLE) -> anyhow::Result<PROCESS_MEMORY_COUNTERS> {
+    let mut pmc = PROCESS_MEMORY_COUNTERS::default();
+    let cb = std::mem::size_of_val(&pmc) as u32;
+
+    unsafe {
+        GetProcessMemoryInfo(process_handle, &mut pmc, cb)?;
+    }
+
+    Ok(pmc)
+}
+
+pub fn combine_bits(high_num: u32, low_num: u32) -> u64 {
+    (high_num as u64) << 32 | low_num as u64
+}
+
+pub fn filetime_to_systemtime(mut file_time: FILETIME) -> anyhow::Result<SYSTEMTIME> {
+
+    let mut systemtime = SYSTEMTIME::default();
+
+    unsafe {
+        FileTimeToSystemTime(&mut file_time, &mut systemtime)?;
+    }
+
+    Ok(systemtime)
+}
+
+fn filetime_to_u64(f: &FILETIME) -> u64 {
+    unsafe {
+        let mut v: ULARGE_INTEGER = mem::zeroed();
+        v.s_mut().LowPart = f.dwLowDateTime;
+        v.s_mut().HighPart = f.dwHighDateTime;
+        *v.QuadPart()
+    }
+}
+
+fn filetime_to_duration(f: &FILETIME) -> Duration {
+    let hundred_nanos = filetime_to_u64(f);
+
+    // 1 second is 10^9 nanoseconds,
+    // so 1 second is 10^7 * (100 nanoseconds).
+    let seconds = hundred_nanos / u64::pow(10, 7);
+    // 1 second is 10^9 nanos which always fits in a u32.
+    let nanos = ((hundred_nanos % u64::pow(10, 7)) * 100) as u32;
+
+    Duration::new(seconds, nanos)
 }

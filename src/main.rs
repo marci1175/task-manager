@@ -5,6 +5,8 @@ use eframe::NativeOptions;
 pub mod ui;
 
 fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
+    std::env::set_var("RUST_BACKTRACE", "1");
+
     eframe::run_native(
         "Task Manager",
         {
