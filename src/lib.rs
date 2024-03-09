@@ -6,14 +6,14 @@ use winapi::um::winnt::ULARGE_INTEGER;
 use windows::Win32::Foundation::{CloseHandle, FILETIME, SYSTEMTIME};
 use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, TH32CS_SNAPPROCESS};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
-use windows::Win32::System::Threading::{GetProcessTimes, OpenProcess, PROCESS_ALL_ACCESS};
-use windows::Win32::System::Time::{FileTimeToSystemTime};
+use windows::Win32::System::Threading::{GetProcessTimes, OpenProcess, TerminateProcess, PROCESS_ALL_ACCESS};
+use windows::Win32::System::Time::FileTimeToSystemTime;
 use windows::{
     core::PCWSTR,
     Win32::{
         Foundation::HANDLE,
         System::{
-            Diagnostics::ToolHelp::{Process32FirstW, Process32NextW, PROCESSENTRY32W},
+            Diagnostics::ToolHelp::{Process32NextW, PROCESSENTRY32W},
             ProcessStatus::PROCESS_MEMORY_COUNTERS,
             Threading::{GetCurrentProcess, GetProcessId},
         },
@@ -63,6 +63,68 @@ pub struct CpuTime {
     pub cpu_time_kernel: Duration,
 }
 
+fn filetime_to_u64(f: &FILETIME) -> u64 {
+    unsafe {
+        let mut v: ULARGE_INTEGER = mem::zeroed();
+        v.s_mut().LowPart = f.dwLowDateTime;
+        v.s_mut().HighPart = f.dwHighDateTime;
+        *v.QuadPart()
+    }
+}
+
+fn filetime_to_duration(f: &FILETIME) -> Duration {
+    let hundred_nanos = filetime_to_u64(f);
+
+    // 1 second is 10^9 nanoseconds,
+    // so 1 second is 10^7 * (100 nanoseconds).
+    let seconds = hundred_nanos / u64::pow(10, 7);
+    // 1 second is 10^9 nanos which always fits in a u32.
+    let nanos = ((hundred_nanos % u64::pow(10, 7)) * 100) as u32;
+
+    Duration::new(seconds, nanos)
+}
+
+fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes>> {
+    let mut proc_attr_list: Vec<ProcessAttributes> = Vec::new();
+
+    unsafe {
+        let mut pe32 = alloc_proc_entry();
+
+        while let Ok(_) = Process32NextW(hsnapshot, &mut pe32) {
+            let process_id = pe32.th32ProcessID;
+
+            match OpenProcess(PROCESS_ALL_ACCESS, false, process_id) {
+                Ok(process_handle) => {
+                    let process_memory = get_memory_usage(process_handle)?;
+                    let process_cpu_times = get_cpu_times(process_handle)?;
+
+                    proc_attr_list.push(ProcessAttributes::new(
+                        process_memory,
+                        process_cpu_times,
+                        pe32,
+                    ));
+                }
+                Err(err) => {
+                    dbg!(err);
+                }
+            };
+        }
+    }
+
+    Ok(proc_attr_list)
+}
+
+fn get_memory_usage(process_handle: HANDLE) -> anyhow::Result<PROCESS_MEMORY_COUNTERS> {
+    let mut pmc = PROCESS_MEMORY_COUNTERS::default();
+    let cb = std::mem::size_of_val(&pmc) as u32;
+
+    unsafe {
+        GetProcessMemoryInfo(process_handle, &mut pmc, cb)?;
+    }
+
+    Ok(pmc)
+}
+
 fn get_cpu_times(process_handle: HANDLE) -> anyhow::Result<CpuTime> {
     let mut lp_creation_time = FILETIME::default();
     let mut lp_exit_time = FILETIME::default();
@@ -80,7 +142,10 @@ fn get_cpu_times(process_handle: HANDLE) -> anyhow::Result<CpuTime> {
         )?;
     }
 
-    Ok(CpuTime {cpu_time_kernel: filetime_to_duration(&lp_kernel_time), cpu_time_user: filetime_to_duration(&lp_user_time)})
+    Ok(CpuTime {
+        cpu_time_kernel: filetime_to_duration(&lp_kernel_time),
+        cpu_time_user: filetime_to_duration(&lp_user_time),
+    })
 }
 
 pub fn display_error_message(
@@ -130,53 +195,7 @@ pub fn fetch_proc_name(proc_name_raw: [u16; 260]) -> String {
     .unwrap()
 }
 
-fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes>> {
-    let mut proc_attr_list: Vec<ProcessAttributes> = Vec::new();
-
-    unsafe {
-        let mut pe32 = alloc_proc_entry();
-
-        while let Ok(_) = Process32NextW(hsnapshot, &mut pe32) {
-            let process_id = pe32.th32ProcessID;
-
-            match OpenProcess(PROCESS_ALL_ACCESS, false, process_id) {
-                Ok(process_handle) => {
-                    let process_memory = get_memory_usage(process_handle)?;
-                    let process_cpu_times = get_cpu_times(process_handle)?;
-
-                    proc_attr_list.push(ProcessAttributes::new(
-                        process_memory,
-                        process_cpu_times,
-                        pe32,
-                    ));
-                }
-                Err(err) => {
-                    dbg!(err);
-                }
-            };
-        }
-    }
-
-    Ok(proc_attr_list)
-}
-
-fn get_memory_usage(process_handle: HANDLE) -> anyhow::Result<PROCESS_MEMORY_COUNTERS> {
-    let mut pmc = PROCESS_MEMORY_COUNTERS::default();
-    let cb = std::mem::size_of_val(&pmc) as u32;
-
-    unsafe {
-        GetProcessMemoryInfo(process_handle, &mut pmc, cb)?;
-    }
-
-    Ok(pmc)
-}
-
-pub fn combine_bits(high_num: u32, low_num: u32) -> u64 {
-    (high_num as u64) << 32 | low_num as u64
-}
-
 pub fn filetime_to_systemtime(mut file_time: FILETIME) -> anyhow::Result<SYSTEMTIME> {
-
     let mut systemtime = SYSTEMTIME::default();
 
     unsafe {
@@ -186,23 +205,14 @@ pub fn filetime_to_systemtime(mut file_time: FILETIME) -> anyhow::Result<SYSTEMT
     Ok(systemtime)
 }
 
-fn filetime_to_u64(f: &FILETIME) -> u64 {
+pub fn terminate_process(pid: u32) -> anyhow::Result<()> {
     unsafe {
-        let mut v: ULARGE_INTEGER = mem::zeroed();
-        v.s_mut().LowPart = f.dwLowDateTime;
-        v.s_mut().HighPart = f.dwHighDateTime;
-        *v.QuadPart()
+        let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
+
+        TerminateProcess(process_handle, 0)?;
+    
+        CloseHandle(process_handle)?;
     }
-}
 
-fn filetime_to_duration(f: &FILETIME) -> Duration {
-    let hundred_nanos = filetime_to_u64(f);
-
-    // 1 second is 10^9 nanoseconds,
-    // so 1 second is 10^7 * (100 nanoseconds).
-    let seconds = hundred_nanos / u64::pow(10, 7);
-    // 1 second is 10^9 nanos which always fits in a u32.
-    let nanos = ((hundred_nanos % u64::pow(10, 7)) * 100) as u32;
-
-    Duration::new(seconds, nanos)
+    Ok(())
 }

@@ -2,11 +2,12 @@ use std::time::Duration;
 
 use chrono::Local;
 use eframe::App;
-use egui::Sense;
+use egui::{vec2, Sense};
 use egui_extras::{Column, TableBuilder};
 use task_manager::{
-    combine_bits, display_error_message, fetch_proc_name, filetime_to_systemtime, get_process_list, ProcessAttributes
+    display_error_message, fetch_proc_name, filetime_to_systemtime, get_process_list, terminate_process, ProcessAttributes
 };
+
 #[derive(Clone, Debug, PartialEq)]
 enum SortProcesses {
     Name(String),
@@ -14,6 +15,15 @@ enum SortProcesses {
     RamUsage,
     DriveUsage,
     Pid,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Unit {
+    B,
+    KB,
+    MB,
+    GB,
+    TB,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -32,6 +42,8 @@ pub struct TaskManager {
     last_check: std::time::Instant,
 
     update_frequency: u64,
+
+    processor_usage: f64,
 
     biggest_col_height: f32,
 
@@ -60,6 +72,8 @@ impl Default for TaskManager {
             update_frequency: 3,
 
             biggest_col_height: 400.,
+
+            processor_usage: 0.,
 
             sort_processes: None,
         }
@@ -118,11 +132,12 @@ impl App for TaskManager {
                                 "Process Id",
                             );
                         });
+                    
                 });
 
                 ui.label(format!(
-                    "Process count: {}",
-                    self.current_process_list.len()
+                    "Process count: {} | Processor usage: {}%",
+                    self.current_process_list.len(), self.processor_usage
                 ));
             });
         });
@@ -151,9 +166,6 @@ impl App for TaskManager {
                     });
                     row.col(|ui| {
                         ui.label("Process ID");
-
-                        // //Fill out the rest of the ui
-                        // ui.allocate_space(ui.available_size());
                     });
                 })
                 .body(|mut body| {
@@ -161,29 +173,38 @@ impl App for TaskManager {
                     for (index, proc_attributes) in self.current_process_list.iter().enumerate() {
                         body.row(25., |mut row| {
                             //proc_name
-                            let col_height = row
+                            let proc_name = row
                                 .col(|ui| {
                                     ui.horizontal_centered(|ui| {
                                         ui.label(fetch_proc_name(proc_attributes.process.szExeFile))
                                     });
-                                })
-                                .0
-                                .height();
+                                });
+                                
 
-                            if col_height > self.biggest_col_height {
-                                self.biggest_col_height = col_height
+                            if proc_name.0.height() > self.biggest_col_height {
+                                self.biggest_col_height = proc_name.0.height()
                             };
 
                             //processor usage
-                            row.col(|ui| {
+                            let proc_usage = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
                                     //(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() - 1) as f64
                                     if let Some(last_proc_list) = self.last_process_list.get(index)
                                     {
-                                        let usage = (proc_attributes.process_cpu_info.cpu_time_kernel + proc_attributes.process_cpu_info.cpu_time_user - last_proc_list.process_cpu_info.cpu_time_kernel + last_proc_list.process_cpu_info.cpu_time_user).as_secs_f64() / (chrono::Local::now().timestamp() as f64 / self.last_check_time.timestamp() as f64);
+                                        //Check if this process is exiting (wtf MS), for some unkown reason last_proc is bigger when terminating / exiting, therefor causes a crash
+                                        if (proc_attributes.process_cpu_info.cpu_time_kernel + proc_attributes.process_cpu_info.cpu_time_user) >= (last_proc_list.process_cpu_info.cpu_time_kernel+ last_proc_list.process_cpu_info.cpu_time_user) {
+                                            let usage =
+                                            (proc_attributes.process_cpu_info.cpu_time_kernel
+                                                + proc_attributes.process_cpu_info.cpu_time_user
+                                                - last_proc_list.process_cpu_info.cpu_time_kernel
+                                                + last_proc_list.process_cpu_info.cpu_time_user)
+                                                .as_secs_f64()
+                                                / (chrono::Local::now().timestamp() as f64
+                                                    / self.last_check_time.timestamp() as f64);
 
-                                        /*(cur_time / prev_time) */
-                                        ui.label(format!("{:.2}", usage));
+                                            /*(cur_time / prev_time) */
+                                            ui.label(format!("{:.2}", usage));
+                                        }
                                     }
 
                                     // filetime_to_systemtime(proc_attributes.process_cpu_info);
@@ -191,14 +212,14 @@ impl App for TaskManager {
                             });
 
                             //thread count
-                            row.col(|ui| {
+                            let thread_count = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
                                     ui.label(format!("{}", proc_attributes.process.cntThreads))
                                 });
                             });
 
                             //ram usage
-                            row.col(|ui| {
+                            let ram_usage = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
                                     //In bytes
                                     let memory_usage =
@@ -209,11 +230,40 @@ impl App for TaskManager {
                             });
 
                             //process id
-                            row.col(|ui| {
+                            let proc_id = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
                                     ui.label(format!("{}", proc_attributes.process.th32ProcessID))
                                 });
                             });
+
+                            if proc_id.1.clicked() {
+                                ctx.copy_text(proc_attributes.process.th32ProcessID.to_string());
+                            }
+
+                            proc_name.1.context_menu(|ui| {
+                                ui.label("Process settings");
+
+                                ui.separator();
+                                
+                                if ui.button("Terminate process").clicked() {
+                                    if let Err(err) = terminate_process(proc_attributes.process.th32ProcessID) {
+                                        display_error_message(err, "Error");
+                                    };
+                                }
+
+                                if ui.button("Terminate parent process").clicked() {
+                                    if let Err(err) = terminate_process(proc_attributes.process.th32ParentProcessID) {
+                                        display_error_message(err, "Error");
+                                    };
+                                }
+
+                                ui.separator();
+
+                            });
+
+                            proc_id.1.on_hover_text_at_pointer("Left click top copy");
+
+                            proc_name.1.on_hover_text_at_pointer("Right click for more options");
 
                             //returns response
                             if row.response().interact(Sense::click()).clicked() {
@@ -229,15 +279,15 @@ impl App for TaskManager {
             self.last_check = std::time::Instant::now();
 
             self.last_check_time = chrono::Local::now();
+            
+            self.processor_usage = 0.;
 
             //Run the proc finding
             match get_process_list() {
                 Ok(proc_list) => {
-                    
                     if self.current_process_list.is_empty() {
                         self.last_process_list = proc_list.clone();
-                    }
-                    else {
+                    } else {
                         self.last_process_list = self.current_process_list.clone();
                     }
 
