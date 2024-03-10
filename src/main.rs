@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/*  Gulyásleves recept
+/*  Gulyásleves recipe
 
     Heat the oil or lard in a large pot (preferably a Dutch oven). Add the onions along with a few spoonfuls of water (so they don’t brown) and a pinch of the salt. Cook slowly over very low heat for about 15 to 20 minutes, or until the onions are clear and glassy.
     Remove from the heat and add the paprika, pepper, and caraway seeds. Stir quickly to combine and add a tiny bit of water (to prevent the paprika from burning).

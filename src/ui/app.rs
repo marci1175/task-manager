@@ -365,4 +365,9 @@ impl App for TaskManager {
         //run 4 ever
         ctx.request_repaint();
     }
+    
+    //Persistence
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
+    }
 }
