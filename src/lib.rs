@@ -28,6 +28,8 @@ pub struct ProcessAttributes {
     pub process_memory: PROCESS_MEMORY_COUNTERS,
     pub process_cpu_info: CpuTime,
     pub process: PROCESSENTRY32W,
+    ///Im not sure if this works 100% of the time XD
+    pub processor_usage: f64,
 }
 
 impl ProcessAttributes {
@@ -40,6 +42,8 @@ impl ProcessAttributes {
             process_memory,
             process_cpu_info,
             process,
+
+            processor_usage: 0.,
         }
     }
 }

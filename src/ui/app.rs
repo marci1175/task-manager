@@ -8,6 +8,7 @@ use task_manager::{
     display_error_message, fetch_proc_name, filetime_to_systemtime, get_process_list,
     terminate_process, ProcessAttributes,
 };
+use windows::Win32::System::Diagnostics::ToolHelp::PROCESSENTRY32W;
 
 #[derive(Clone, Debug, PartialEq)]
 enum SortProcesses {
@@ -76,6 +77,63 @@ impl TaskManager {
 
         Default::default()
     }
+    
+    fn extract_processes(&mut self) {
+        self.last_check = std::time::Instant::now();
+    
+        self.last_check_time = chrono::Local::now();
+    
+        self.processor_usage = 0.;
+    
+        //Run the proc finding
+        match get_process_list() {
+            Ok(proc_list) => {
+                if self.current_process_list.is_empty() {
+                    self.last_process_list = proc_list.clone();
+                } else {
+                    self.last_process_list = self.current_process_list.clone();
+                }
+    
+                //filter / sort depending on SortProcesses (self.sort_processes) else just load in the raw proc list
+                if let Some(sort_by) = dbg!(self.sort_processes.clone()) {
+                    self.filter_processes(sort_by);
+                }
+                else {
+                    self.current_process_list = proc_list;
+                }
+            }
+            Err(err) => {
+                dbg!(err.backtrace());
+                display_error_message(format!("{err}"), "Error");
+            }
+        }
+    }
+
+    fn filter_processes(&mut self, filter: SortProcesses) {
+        match filter {
+            SortProcesses::Name(name) => {
+                for (index, proc) in &mut self.current_process_list.clone().iter().enumerate() {
+                    if !fetch_proc_name(proc.process.szExeFile).contains(&name) {
+                        if let Some(_) = self.current_process_list.get(index) {
+                            self.current_process_list.remove(index);
+                        }
+                    }
+                }
+            },
+            SortProcesses::CpuUsage => {
+                self.current_process_list.sort_by_key(|key| key.processor_usage.floor() as i64);
+            },
+            SortProcesses::RamUsage => {
+                self.current_process_list.sort_by_key(|key| key.process_memory.WorkingSetSize);
+            },
+            SortProcesses::DriveUsage => {
+
+            },
+            SortProcesses::Pid => {
+                self.current_process_list.sort_by_key(|key| key.process.th32ProcessID);
+            },
+        }
+    }
 }
 
 impl Default for TaskManager {
@@ -130,7 +188,7 @@ impl App for TaskManager {
                     ui.horizontal(|ui| {
                         ui.label("Search parameters");
 
-                        egui::ComboBox::from_id_source("Search")
+                        let search = egui::ComboBox::from_id_source("Search")
                             .selected_text({
                                 if let Some(search_parameter) = &self.sort_processes {
                                     format!("{}", search_parameter)
@@ -139,39 +197,49 @@ impl App for TaskManager {
                                 }
                             })
                             .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.sort_processes, None, "None").clicked() ||
                                 ui.selectable_value(
                                     &mut self.sort_processes,
                                     Some(SortProcesses::CpuUsage),
                                     "CPU Usage",
-                                );
+                                ).clicked() ||
                                 ui.selectable_value(
                                     &mut self.sort_processes,
                                     Some(SortProcesses::Name(String::new())),
                                     "Name",
-                                );
+                                ).clicked() ||
                                 ui.selectable_value(
                                     &mut self.sort_processes,
                                     Some(SortProcesses::RamUsage),
                                     "RAM Usage",
-                                );
+                                ).clicked() ||
                                 ui.selectable_value(
                                     &mut self.sort_processes,
                                     Some(SortProcesses::DriveUsage),
                                     "Drive usage",
-                                );
+                                ).clicked() ||                              
                                 ui.selectable_value(
                                     &mut self.sort_processes,
                                     Some(SortProcesses::Pid),
                                     "Process ID",
-                                );
+                                ).clicked()
                             });
+                        
+                        //Check for interaction for faster refresh of the filtered processed
+                        if let Some(inner) = search.inner {
+                            if inner {
+                                self.extract_processes();
+                            }
+                        }
 
                         ui.allocate_space(vec2(0., 120.));
 
                     });
 
                     if let Some(SortProcesses::Name(inner_string)) = self.sort_processes.as_mut() {
-                        ui.text_edit_singleline(inner_string);
+                        if ui.text_edit_singleline(inner_string).changed() {
+                            self.extract_processes();
+                        };
                     }
 
                 });
@@ -212,7 +280,7 @@ impl App for TaskManager {
                 })
                 .body(|mut body| {
                     //Insert process flags here
-                    for (index, proc_attributes) in self.current_process_list.iter().enumerate() {
+                    for (index, proc_attributes) in self.current_process_list.iter_mut().enumerate() {
                         body.row(25., |mut row| {
                             //proc_name
                             let proc_name = row.col(|ui| {
@@ -246,6 +314,8 @@ impl App for TaskManager {
                                                 .as_secs_f64()
                                                 / (chrono::Local::now().timestamp() as f64
                                                     / self.last_check_time.timestamp() as f64);
+                                            
+                                            proc_attributes.processor_usage = usage;
 
                                             /*(cur_time / prev_time) */
                                             ui.label(format!("{:.2} %", usage));
@@ -338,28 +408,7 @@ impl App for TaskManager {
 
         //Check for processes
         if self.last_check.elapsed() > Duration::from_secs(self.update_frequency) {
-            self.last_check = std::time::Instant::now();
-
-            self.last_check_time = chrono::Local::now();
-
-            self.processor_usage = 0.;
-
-            //Run the proc finding
-            match get_process_list() {
-                Ok(proc_list) => {
-                    if self.current_process_list.is_empty() {
-                        self.last_process_list = proc_list.clone();
-                    } else {
-                        self.last_process_list = self.current_process_list.clone();
-                    }
-
-                    self.current_process_list = proc_list;
-                }
-                Err(err) => {
-                    dbg!(err.backtrace());
-                    display_error_message(format!("{err}"), "Error");
-                }
-            }
+            self.extract_processes();
         }
 
         //run 4 ever
