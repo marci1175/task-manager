@@ -21,15 +21,16 @@ enum SortProcesses {
 
 impl Display for SortProcesses {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            &format!("{}", match self {
+        f.write_str(&format!(
+            "{}",
+            match self {
                 SortProcesses::Name(_) => "Name",
                 SortProcesses::CpuUsage => "CPU usage",
                 SortProcesses::RamUsage => "RAM usage",
                 SortProcesses::DriveUsage => "Drive usage",
                 SortProcesses::Pid => "Process ID",
-            })
-        )
+            }
+        ))
     }
 }
 
@@ -77,14 +78,14 @@ impl TaskManager {
 
         Default::default()
     }
-    
+
     fn extract_processes(&mut self) {
         self.last_check = std::time::Instant::now();
-    
+
         self.last_check_time = chrono::Local::now();
-    
+
         self.processor_usage = 0.;
-    
+
         //Run the proc finding
         match get_process_list() {
             Ok(proc_list) => {
@@ -93,12 +94,11 @@ impl TaskManager {
                 } else {
                     self.last_process_list = self.current_process_list.clone();
                 }
-    
+
                 //filter / sort depending on SortProcesses (self.sort_processes) else just load in the raw proc list
                 if let Some(sort_by) = dbg!(self.sort_processes.clone()) {
                     self.filter_processes(sort_by);
-                }
-                else {
+                } else {
                     self.current_process_list = proc_list;
                 }
             }
@@ -119,19 +119,20 @@ impl TaskManager {
                         }
                     }
                 }
-            },
+            }
             SortProcesses::CpuUsage => {
-                self.current_process_list.sort_by_key(|key| key.processor_usage.floor() as i64);
-            },
+                self.current_process_list
+                    .sort_by_key(|key| key.processor_usage.floor() as i64);
+            }
             SortProcesses::RamUsage => {
-                self.current_process_list.sort_by_key(|key| key.process_memory.WorkingSetSize);
-            },
-            SortProcesses::DriveUsage => {
-
-            },
+                self.current_process_list
+                    .sort_by_key(|key| key.process_memory.WorkingSetSize);
+            }
+            SortProcesses::DriveUsage => {}
             SortProcesses::Pid => {
-                self.current_process_list.sort_by_key(|key| key.process.th32ProcessID);
-            },
+                self.current_process_list
+                    .sort_by_key(|key| key.process.th32ProcessID);
+            }
         }
     }
 }
@@ -171,7 +172,7 @@ impl App for TaskManager {
                         ui.label("Memory unit");
 
                         let combobox = egui::ComboBox::from_id_source("Memory unit")
-                            .selected_text(format!("{:?}", self.memory_unit) )
+                            .selected_text(format!("{:?}", self.memory_unit))
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.memory_unit, Unit::B, "B");
                                 ui.selectable_value(&mut self.memory_unit, Unit::KB, "KB");
@@ -197,34 +198,45 @@ impl App for TaskManager {
                                 }
                             })
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.sort_processes, None, "None").clicked() ||
-                                ui.selectable_value(
-                                    &mut self.sort_processes,
-                                    Some(SortProcesses::CpuUsage),
-                                    "CPU Usage",
-                                ).clicked() ||
-                                ui.selectable_value(
-                                    &mut self.sort_processes,
-                                    Some(SortProcesses::Name(String::new())),
-                                    "Name",
-                                ).clicked() ||
-                                ui.selectable_value(
-                                    &mut self.sort_processes,
-                                    Some(SortProcesses::RamUsage),
-                                    "RAM Usage",
-                                ).clicked() ||
-                                ui.selectable_value(
-                                    &mut self.sort_processes,
-                                    Some(SortProcesses::DriveUsage),
-                                    "Drive usage",
-                                ).clicked() ||                              
-                                ui.selectable_value(
-                                    &mut self.sort_processes,
-                                    Some(SortProcesses::Pid),
-                                    "Process ID",
-                                ).clicked()
+                                ui.selectable_value(&mut self.sort_processes, None, "None")
+                                    .clicked()
+                                    || ui
+                                        .selectable_value(
+                                            &mut self.sort_processes,
+                                            Some(SortProcesses::CpuUsage),
+                                            "CPU Usage",
+                                        )
+                                        .clicked()
+                                    || ui
+                                        .selectable_value(
+                                            &mut self.sort_processes,
+                                            Some(SortProcesses::Name(String::new())),
+                                            "Name",
+                                        )
+                                        .clicked()
+                                    || ui
+                                        .selectable_value(
+                                            &mut self.sort_processes,
+                                            Some(SortProcesses::RamUsage),
+                                            "RAM Usage",
+                                        )
+                                        .clicked()
+                                    || ui
+                                        .selectable_value(
+                                            &mut self.sort_processes,
+                                            Some(SortProcesses::DriveUsage),
+                                            "Drive usage",
+                                        )
+                                        .clicked()
+                                    || ui
+                                        .selectable_value(
+                                            &mut self.sort_processes,
+                                            Some(SortProcesses::Pid),
+                                            "Process ID",
+                                        )
+                                        .clicked()
                             });
-                        
+
                         //Check for interaction for faster refresh of the filtered processed
                         if let Some(inner) = search.inner {
                             if inner {
@@ -233,7 +245,6 @@ impl App for TaskManager {
                         }
 
                         ui.allocate_space(vec2(0., 120.));
-
                     });
 
                     if let Some(SortProcesses::Name(inner_string)) = self.sort_processes.as_mut() {
@@ -241,7 +252,6 @@ impl App for TaskManager {
                             self.extract_processes();
                         };
                     }
-
                 });
 
                 ui.label(format!(
@@ -280,7 +290,8 @@ impl App for TaskManager {
                 })
                 .body(|mut body| {
                     //Insert process flags here
-                    for (index, proc_attributes) in self.current_process_list.iter_mut().enumerate() {
+                    for (index, proc_attributes) in self.current_process_list.iter_mut().enumerate()
+                    {
                         body.row(25., |mut row| {
                             //proc_name
                             let proc_name = row.col(|ui| {
@@ -314,7 +325,7 @@ impl App for TaskManager {
                                                 .as_secs_f64()
                                                 / (chrono::Local::now().timestamp() as f64
                                                     / self.last_check_time.timestamp() as f64);
-                                            
+
                                             proc_attributes.processor_usage = usage;
 
                                             /*(cur_time / prev_time) */
@@ -344,13 +355,22 @@ impl App for TaskManager {
                                         Unit::B => format!("{} B", memory_usage),
                                         Unit::KB => format!("{:.1} KB", memory_usage / 1024),
                                         Unit::MB => {
-                                            format!("{:.2} MB", memory_usage as f32 / 1024_f32.powf(2.))
+                                            format!(
+                                                "{:.2} MB",
+                                                memory_usage as f32 / 1024_f32.powf(2.)
+                                            )
                                         }
                                         Unit::GB => {
-                                            format!("{:.3} GB", memory_usage as f32 / 1024_f32.powf(3.))
+                                            format!(
+                                                "{:.3} GB",
+                                                memory_usage as f32 / 1024_f32.powf(3.)
+                                            )
                                         }
                                         Unit::TB => {
-                                            format!("{:.5} TB", memory_usage as f32 / 1024_f32.powf(4.))
+                                            format!(
+                                                "{:.5} TB",
+                                                memory_usage as f32 / 1024_f32.powf(4.)
+                                            )
                                         }
                                     });
                                 });
@@ -414,7 +434,7 @@ impl App for TaskManager {
         //run 4 ever
         ctx.request_repaint();
     }
-    
+
     //Persistence
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
