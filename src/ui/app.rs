@@ -5,10 +5,8 @@ use eframe::App;
 use egui::{vec2, Sense};
 use egui_extras::{Column, TableBuilder};
 use task_manager::{
-    display_error_message, fetch_proc_name, filetime_to_systemtime, get_process_list,
-    terminate_process, ProcessAttributes,
+    display_error_message, fetch_raw_string, fetch_proc_path, get_process_list, terminate_process, ProcessAttributes
 };
-use windows::Win32::System::Diagnostics::ToolHelp::PROCESSENTRY32W;
 
 #[derive(Clone, Debug, PartialEq)]
 enum SortProcesses {
@@ -113,7 +111,7 @@ impl TaskManager {
         match filter {
             SortProcesses::Name(name) => {
                 for (index, proc) in &mut self.current_process_list.clone().iter().enumerate() {
-                    if !fetch_proc_name(proc.process.szExeFile).contains(&name) {
+                    if !fetch_raw_string(proc.process.szExeFile).contains(&name) {
                         if let Some(_) = self.current_process_list.get(index) {
                             self.current_process_list.remove(index);
                         }
@@ -296,7 +294,7 @@ impl App for TaskManager {
                             //proc_name
                             let proc_name = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
-                                    ui.label(fetch_proc_name(proc_attributes.process.szExeFile))
+                                    ui.label(fetch_raw_string(proc_attributes.process.szExeFile))
                                 });
                             });
 
@@ -409,6 +407,21 @@ impl App for TaskManager {
                                 }
 
                                 ui.separator();
+
+                                if ui.button("Copy process path").clicked() {
+                                    ctx.copy_text(fetch_raw_string(proc_attributes.module.szExePath))
+                                }
+
+                                if ui.button("Show file location").clicked() {
+                                    let mut path = fetch_raw_string(proc_attributes.module.szExePath);
+
+                                    //Strip path from nul bytes
+                                    let stripped_path = path.trim_matches(|c| c == '\0');
+
+                                    if let Err(err) = std::process::Command::new("explorer.exe").arg(stripped_path).spawn() {
+                                        display_error_message(err, "Error");
+                                    };
+                                }
                             });
 
                             proc_id.1.on_hover_text_at_pointer("Left click top copy");

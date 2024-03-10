@@ -1,15 +1,17 @@
 use std::fmt::Display;
-use std::mem;
+use std::mem::{self, size_of};
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
 
+use winapi::um::fileapi::GetDriveTypeW;
 use winapi::um::winnt::ULARGE_INTEGER;
 use windows::Win32::Foundation::{CloseHandle, FILETIME, SYSTEMTIME};
-use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, TH32CS_SNAPPROCESS};
+use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, CREATE_TOOLHELP_SNAPSHOT_FLAGS, MODULEENTRY32W, PROCESSENTRY32, TH32CS_SNAPALL, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32, TH32CS_SNAPPROCESS};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
 use windows::Win32::System::Threading::{
     GetProcessTimes, OpenProcess, TerminateProcess, PROCESS_ALL_ACCESS,
 };
-use windows::Win32::System::Time::FileTimeToSystemTime;
 use windows::{
     core::PCWSTR,
     Win32::{
@@ -28,6 +30,8 @@ pub struct ProcessAttributes {
     pub process_memory: PROCESS_MEMORY_COUNTERS,
     pub process_cpu_info: CpuTime,
     pub process: PROCESSENTRY32W,
+    pub module: MODULEENTRY32W,
+
     ///Im not sure if this works 100% of the time XD
     pub processor_usage: f64,
 }
@@ -37,11 +41,13 @@ impl ProcessAttributes {
         process_memory: PROCESS_MEMORY_COUNTERS,
         process_cpu_info: CpuTime,
         process: PROCESSENTRY32W,
+        module: MODULEENTRY32W,
     ) -> Self {
         Self {
             process_memory,
             process_cpu_info,
             process,
+            module,
 
             processor_usage: 0.,
         }
@@ -59,8 +65,25 @@ fn alloc_proc_entry() -> PROCESSENTRY32W {
     }
 }
 
-fn create_snapshot() -> Result<HANDLE, windows::core::Error> {
-    unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }
+fn create_snapshot_from_all() -> Result<HANDLE, windows::core::Error> {
+    unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPALL , 0) }
+}
+
+fn create_module_snapshot_from_pid(pid : u32) -> Result<HANDLE, windows::core::Error> {
+    unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }
+}
+
+fn get_module_from_snapshot(hsnapshot: HANDLE) -> anyhow::Result<MODULEENTRY32W> {
+    let mut me32 = MODULEENTRY32W {
+        dwSize: size_of::<MODULEENTRY32W>() as u32,
+        ..Default::default()
+    };
+
+    unsafe {
+        Module32FirstW(hsnapshot, &mut me32)?;
+    }
+
+    Ok(me32)
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +118,7 @@ fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes
 
     unsafe {
         let mut pe32 = alloc_proc_entry();
+        let mut me32 = MODULEENTRY32W::default();
 
         while let Ok(_) = Process32NextW(hsnapshot, &mut pe32) {
             let process_id = pe32.th32ProcessID;
@@ -104,14 +128,17 @@ fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes
                     let process_memory = get_memory_usage(process_handle)?;
                     let process_cpu_times = get_cpu_times(process_handle)?;
 
+                    me32 = get_module_from_snapshot(create_module_snapshot_from_pid(process_id)?)?;
+
                     proc_attr_list.push(ProcessAttributes::new(
                         process_memory,
                         process_cpu_times,
                         pe32,
+                        me32
                     ));
                 }
                 Err(err) => {
-                    dbg!(err);
+                    // dbg!(err);
                 }
             };
         }
@@ -179,7 +206,7 @@ pub fn display_error_message(
 }
 
 pub fn get_process_list() -> anyhow::Result<Vec<ProcessAttributes>> {
-    let snapshot = create_snapshot()?;
+    let snapshot = create_snapshot_from_all()?;
     let proc_list = get_proc_attr_list(snapshot);
 
     //Close handle
@@ -190,7 +217,7 @@ pub fn get_process_list() -> anyhow::Result<Vec<ProcessAttributes>> {
     proc_list
 }
 
-pub fn fetch_proc_name(proc_name_raw: [u16; 260]) -> String {
+pub fn fetch_raw_string(proc_name_raw: [u16; 260]) -> String {
     String::from_utf8(
         proc_name_raw
             .to_vec()
@@ -201,14 +228,9 @@ pub fn fetch_proc_name(proc_name_raw: [u16; 260]) -> String {
     .unwrap()
 }
 
-pub fn filetime_to_systemtime(mut file_time: FILETIME) -> anyhow::Result<SYSTEMTIME> {
-    let mut systemtime = SYSTEMTIME::default();
-
-    unsafe {
-        FileTimeToSystemTime(&mut file_time, &mut systemtime)?;
-    }
-
-    Ok(systemtime)
+pub fn fetch_proc_path(proc_path_raw: [u16; 260]) -> PathBuf {
+    //We can use the fetch_raw_string fn to turn the path into a string then to a pathbuf
+    PathBuf::from_str(&fetch_raw_string(proc_path_raw)).unwrap()
 }
 
 pub fn terminate_process(pid: u32) -> anyhow::Result<()> {
