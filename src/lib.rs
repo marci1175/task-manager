@@ -6,7 +6,9 @@ use winapi::um::winnt::ULARGE_INTEGER;
 use windows::Win32::Foundation::{CloseHandle, FILETIME, SYSTEMTIME};
 use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, TH32CS_SNAPPROCESS};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
-use windows::Win32::System::Threading::{GetProcessTimes, OpenProcess, TerminateProcess, PROCESS_ALL_ACCESS};
+use windows::Win32::System::Threading::{
+    GetProcessTimes, OpenProcess, TerminateProcess, PROCESS_ALL_ACCESS,
+};
 use windows::Win32::System::Time::FileTimeToSystemTime;
 use windows::{
     core::PCWSTR,
@@ -210,7 +212,7 @@ pub fn terminate_process(pid: u32) -> anyhow::Result<()> {
         let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
 
         TerminateProcess(process_handle, 0)?;
-    
+
         CloseHandle(process_handle)?;
     }
 
