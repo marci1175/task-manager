@@ -418,9 +418,14 @@ impl App for TaskManager {
                                     //Strip path from nul bytes
                                     let stripped_path = path.trim_matches(|c| c == '\0');
 
-                                    if let Err(err) = std::process::Command::new("explorer.exe").arg(stripped_path).spawn() {
-                                        display_error_message(err, "Error");
-                                    };
+                                    match std::process::Command::new("explorer").arg(format!("{}", stripped_path)).spawn() {
+                                        Ok(mut handle) => {
+                                            handle.wait();
+                                        }
+                                        Err(err) => {
+                                            display_error_message(err, "Error");
+                                        }
+                                    }
                                 }
                             });
 
