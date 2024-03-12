@@ -418,7 +418,7 @@ impl App for TaskManager {
                                     let stripped_path = path.trim_matches(|c| c == '\0');
 
                                     match std::process::Command::new("explorer")
-                                        .arg(stripped_path)
+                                        .arg("/C").arg(stripped_path)
                                         .spawn()
                                     {
                                         Ok(handle) => {}
