@@ -5,7 +5,7 @@ use eframe::App;
 use egui::{vec2, Sense};
 use egui_extras::{Column, TableBuilder};
 use task_manager::{
-    display_error_message, fetch_raw_string, fetch_proc_path, get_process_list, terminate_process, ProcessAttributes
+    display_error_message, fetch_raw_string, get_process_list, terminate_process, ProcessAttributes,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -19,16 +19,13 @@ enum SortProcesses {
 
 impl Display for SortProcesses {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!(
-            "{}",
-            match self {
-                SortProcesses::Name(_) => "Name",
-                SortProcesses::CpuUsage => "CPU usage",
-                SortProcesses::RamUsage => "RAM usage",
-                SortProcesses::DriveUsage => "Drive usage",
-                SortProcesses::Pid => "Process ID",
-            }
-        ))
+        f.write_str(match self {
+            SortProcesses::Name(_) => "Name",
+            SortProcesses::CpuUsage => "CPU usage",
+            SortProcesses::RamUsage => "RAM usage",
+            SortProcesses::DriveUsage => "Drive usage",
+            SortProcesses::Pid => "Process ID",
+        })
     }
 }
 
@@ -111,10 +108,10 @@ impl TaskManager {
         match filter {
             SortProcesses::Name(name) => {
                 for (index, proc) in &mut self.current_process_list.clone().iter().enumerate() {
-                    if !fetch_raw_string(proc.process.szExeFile).contains(&name) {
-                        if let Some(_) = self.current_process_list.get(index) {
-                            self.current_process_list.remove(index);
-                        }
+                    if !fetch_raw_string(proc.process.szExeFile).contains(&name)
+                        && self.current_process_list.get(index).is_some()
+                    {
+                        self.current_process_list.remove(index);
                     }
                 }
             }
@@ -409,19 +406,22 @@ impl App for TaskManager {
                                 ui.separator();
 
                                 if ui.button("Copy process path").clicked() {
-                                    ctx.copy_text(fetch_raw_string(proc_attributes.module.szExePath))
+                                    ctx.copy_text(fetch_raw_string(
+                                        proc_attributes.module.szExePath,
+                                    ))
                                 }
 
                                 if ui.button("Show file location").clicked() {
-                                    let mut path = fetch_raw_string(proc_attributes.module.szExePath);
+                                    let path = fetch_raw_string(proc_attributes.module.szExePath);
 
                                     //Strip path from nul bytes
                                     let stripped_path = path.trim_matches(|c| c == '\0');
 
-                                    match std::process::Command::new("explorer").arg(format!("{}", stripped_path)).spawn() {
-                                        Ok(mut handle) => {
-                                            handle.wait();
-                                        }
+                                    match std::process::Command::new("explorer")
+                                        .arg(stripped_path)
+                                        .spawn()
+                                    {
+                                        Ok(handle) => {}
                                         Err(err) => {
                                             display_error_message(err, "Error");
                                         }

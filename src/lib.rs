@@ -4,10 +4,12 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
-use winapi::um::fileapi::GetDriveTypeW;
 use winapi::um::winnt::ULARGE_INTEGER;
-use windows::Win32::Foundation::{CloseHandle, FILETIME, SYSTEMTIME};
-use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, CREATE_TOOLHELP_SNAPSHOT_FLAGS, MODULEENTRY32W, PROCESSENTRY32, TH32CS_SNAPALL, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32, TH32CS_SNAPPROCESS};
+use windows::Win32::Foundation::{CloseHandle, FILETIME};
+use windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Module32FirstW, MODULEENTRY32W, TH32CS_SNAPALL, TH32CS_SNAPMODULE,
+    TH32CS_SNAPMODULE32,
+};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
 use windows::Win32::System::Threading::{
     GetProcessTimes, OpenProcess, TerminateProcess, PROCESS_ALL_ACCESS,
@@ -66,10 +68,10 @@ fn alloc_proc_entry() -> PROCESSENTRY32W {
 }
 
 fn create_snapshot_from_all() -> Result<HANDLE, windows::core::Error> {
-    unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPALL , 0) }
+    unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPALL, 0) }
 }
 
-fn create_module_snapshot_from_pid(pid : u32) -> Result<HANDLE, windows::core::Error> {
+fn create_module_snapshot_from_pid(pid: u32) -> Result<HANDLE, windows::core::Error> {
     unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }
 }
 
@@ -120,7 +122,7 @@ fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes
         let mut pe32 = alloc_proc_entry();
         let mut me32 = MODULEENTRY32W::default();
 
-        while let Ok(_) = Process32NextW(hsnapshot, &mut pe32) {
+        while Process32NextW(hsnapshot, &mut pe32).is_ok() {
             let process_id = pe32.th32ProcessID;
 
             match OpenProcess(PROCESS_ALL_ACCESS, false, process_id) {
@@ -134,7 +136,7 @@ fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes
                         process_memory,
                         process_cpu_times,
                         pe32,
-                        me32
+                        me32,
                     ));
                 }
                 Err(err) => {
