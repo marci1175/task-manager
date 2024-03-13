@@ -1,4 +1,4 @@
-use std::{fmt::Display, time::Duration};
+use std::{fmt::Display, path::PathBuf, time::Duration};
 
 use chrono::Local;
 use eframe::App;
@@ -415,10 +415,10 @@ impl App for TaskManager {
                                     let path = fetch_raw_string(proc_attributes.module.szExePath);
 
                                     //Strip path from nul bytes
-                                    let stripped_path = path.trim_matches(|c| c == '\0');
+                                    let stripped_path = PathBuf::from(path.trim_matches(|c| c == '\0'));
 
                                     match std::process::Command::new("explorer")
-                                        .arg("/C").arg(stripped_path)
+                                        .arg("/select,").arg(stripped_path.to_string_lossy().to_string())
                                         .spawn()
                                     {
                                         Ok(handle) => {}
