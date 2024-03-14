@@ -2,7 +2,7 @@ use std::{fmt::Display, path::PathBuf, time::Duration};
 
 use chrono::Local;
 use eframe::App;
-use egui::{vec2, Sense};
+use egui::{vec2, Layout, Sense};
 use egui_extras::{Column, TableBuilder};
 use task_manager::{
     display_error_message, fetch_raw_string, get_process_list, terminate_process, ProcessAttributes,
@@ -303,9 +303,10 @@ impl App for TaskManager {
         egui::CentralPanel::default().show(ctx, |ui| {
             TableBuilder::new(ui)
                 .resizable(true)
+                .auto_shrink([false, false])
                 .striped(true)
                 .columns(
-                    Column::auto_with_initial_suggestion(ctx.available_rect().width() / 5.),
+                    Column::remainder().at_most(ctx.available_rect().width()),
                     5,
                 )
                 .header(25., |mut row| {
