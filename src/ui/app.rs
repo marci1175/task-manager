@@ -91,8 +91,15 @@ impl TaskManager {
                 }
 
                 //filter / sort depending on SortProcesses (self.sort_processes) else just load in the raw proc list
-                if let Some(sort_by) = dbg!(self.sort_processes.clone()) {
+                if let Some(sort_by) = self.sort_processes.clone() {
+                    
+                    if matches!(sort_by, SortProcesses::Name(_)) {
+                        self.current_process_list = proc_list;
+                        return;
+                    }
+
                     self.filter_processes(sort_by);
+                    
                 } else {
                     self.current_process_list = proc_list;
                 }
@@ -107,13 +114,7 @@ impl TaskManager {
     fn filter_processes(&mut self, filter: SortProcesses) {
         match filter {
             SortProcesses::Name(name) => {
-                for (index, proc) in &mut self.current_process_list.clone().iter().enumerate() {
-                    if !fetch_raw_string(proc.process.szExeFile).contains(&name)
-                        && self.current_process_list.get(index).is_some()
-                    {
-                        self.current_process_list.remove(index);
-                    }
-                }
+                //We dont have to do anything here, cuz we dont need to alter the main vector, as that would be costly
             }
             SortProcesses::CpuUsage => {
                 self.current_process_list
@@ -287,11 +288,22 @@ impl App for TaskManager {
                     //Insert process flags here
                     for (index, proc_attributes) in self.current_process_list.iter_mut().enumerate()
                     {
+                        //Fetch process name so we, can check for it in filtering
+                        let process_name = fetch_raw_string(proc_attributes.process.szExeFile);
+
+                        //Check for process name, and if the process's name contains the filter
+                        if let Some(SortProcesses::Name(sort_name)) = self.sort_processes.clone() {
+                            if !process_name.contains(&sort_name) {
+                                return;
+                            }
+                        }
+
+                        //Create row
                         body.row(25., |mut row| {
                             //proc_name
                             let proc_name = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
-                                    ui.label(fetch_raw_string(proc_attributes.process.szExeFile))
+                                    ui.label(process_name);
                                 });
                             });
 
