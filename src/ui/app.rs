@@ -8,9 +8,24 @@ use task_manager::{
     display_error_message, fetch_raw_string, get_process_list, terminate_process, ProcessAttributes,
 };
 
-#[derive(Clone, Debug, PartialEq)]
-enum SortProcesses {
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub enum NameSearch {
+    Pid(String),
     Name(String),
+}
+
+impl Display for NameSearch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            NameSearch::Name(_) => "Name",
+            NameSearch::Pid(_) => "Process ID",
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SortProcesses {
+    Custom(NameSearch),
     CpuUsage,
     RamUsage,
     DriveUsage,
@@ -20,7 +35,7 @@ enum SortProcesses {
 impl Display for SortProcesses {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            SortProcesses::Name(_) => "Name",
+            SortProcesses::Custom(_) => "Custom",
             SortProcesses::CpuUsage => "CPU usage",
             SortProcesses::RamUsage => "RAM usage",
             SortProcesses::DriveUsage => "Drive usage",
@@ -62,6 +77,8 @@ pub struct TaskManager {
     #[serde(skip)]
     sort_processes: Option<SortProcesses>,
 
+    name_search_type: NameSearch,
+
     memory_unit: Unit,
 }
 
@@ -92,14 +109,12 @@ impl TaskManager {
 
                 //filter / sort depending on SortProcesses (self.sort_processes) else just load in the raw proc list
                 if let Some(sort_by) = self.sort_processes.clone() {
-                    
-                    if matches!(sort_by, SortProcesses::Name(_)) {
+                    if matches!(sort_by, SortProcesses::Custom(_)) {
                         self.current_process_list = proc_list;
                         return;
                     }
 
                     self.filter_processes(sort_by);
-                    
                 } else {
                     self.current_process_list = proc_list;
                 }
@@ -113,7 +128,7 @@ impl TaskManager {
 
     fn filter_processes(&mut self, filter: SortProcesses) {
         match filter {
-            SortProcesses::Name(name) => {
+            SortProcesses::Custom(_) => {
                 //We dont have to do anything here, cuz we dont need to alter the main vector, as that would be costly
             }
             SortProcesses::CpuUsage => {
@@ -141,6 +156,7 @@ impl Default for TaskManager {
 
             last_check_time: chrono::Local::now(),
             last_check: std::time::Instant::now(),
+
             update_frequency: 3,
 
             biggest_col_height: 400.,
@@ -148,6 +164,7 @@ impl Default for TaskManager {
             processor_usage: 0.,
 
             sort_processes: None,
+            name_search_type: NameSearch::Name(String::new()),
             memory_unit: Unit::MB,
         }
     }
@@ -206,8 +223,11 @@ impl App for TaskManager {
                                     || ui
                                         .selectable_value(
                                             &mut self.sort_processes,
-                                            Some(SortProcesses::Name(String::new())),
-                                            "Name",
+                                            Some(SortProcesses::Custom(
+                                                //Default value when clicking custom search filter
+                                                NameSearch::Name(String::new()),
+                                            )),
+                                            "Custom",
                                         )
                                         .clicked()
                                     || ui
@@ -240,14 +260,36 @@ impl App for TaskManager {
                             }
                         }
 
-                        ui.allocate_space(vec2(0., 120.));
+                        ui.allocate_space(vec2(0., 140.));
                     });
 
-                    if let Some(SortProcesses::Name(inner_string)) = self.sort_processes.as_mut() {
-                        if ui.text_edit_singleline(inner_string).changed() {
-                            self.extract_processes();
-                        };
-                    }
+                    if let Some(SortProcesses::Custom(inner_filter)) = self.sort_processes.as_mut() {
+                        egui::ComboBox::from_id_source("name_search_type")
+                            .selected_text(format!("{}", inner_filter.clone()))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    inner_filter,
+                                    NameSearch::Name(String::new()),
+                                    "Name",
+                                );
+                                ui.selectable_value(
+                                    inner_filter,
+                                    NameSearch::Pid(String::new()),
+                                    "Process ID",
+                                );
+                            });
+
+                            match inner_filter {
+                                NameSearch::Pid(inner) => {
+                                    ui.text_edit_singleline(inner);
+                                },
+                                NameSearch::Name(inner) => {
+                                    ui.text_edit_singleline(inner);
+                                },
+                            }
+                    
+                    
+                            ui.allocate_space(vec2(1., 200.));}
                 });
 
                 ui.label(format!(
@@ -292,9 +334,24 @@ impl App for TaskManager {
                         let process_name = fetch_raw_string(proc_attributes.process.szExeFile);
 
                         //Check for process name, and if the process's name contains the filter
-                        if let Some(SortProcesses::Name(sort_name)) = self.sort_processes.clone() {
-                            if !process_name.contains(&sort_name) {
-                                return;
+                        if let Some(SortProcesses::Custom(sort_type)) = self.sort_processes.clone() {
+                            match sort_type {
+                                NameSearch::Pid(pid) => {
+                                    if !proc_attributes
+                                        .process
+                                        .th32ProcessID
+                                        .to_string()
+                                        .contains(&pid.trim())
+                                    {
+                                        return;
+                                    }
+
+                                }
+                                NameSearch::Name(sort_name) => {
+                                    if !process_name.contains(&sort_name.trim()) {
+                                        return;
+                                    }
+                                }
                             }
                         }
 
@@ -314,7 +371,6 @@ impl App for TaskManager {
                             //processor usage DONT TOUCH
                             let proc_usage = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
-                                    //(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() / std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() - 1) as f64
                                     if let Some(last_proc_list) = self.last_process_list.get(index)
                                     {
                                         //Check if this process is exiting (wtf MS), for some unkown reason last_proc is bigger when terminating / exiting, therefor causes a crash
@@ -427,10 +483,12 @@ impl App for TaskManager {
                                     let path = fetch_raw_string(proc_attributes.module.szExePath);
 
                                     //Strip path from nul bytes
-                                    let stripped_path = PathBuf::from(path.trim_matches(|c| c == '\0'));
+                                    let stripped_path =
+                                        PathBuf::from(path.trim_matches(|c| c == '\0'));
 
                                     match std::process::Command::new("explorer")
-                                        .arg("/select,").arg(stripped_path.to_string_lossy().to_string())
+                                        .arg("/select,")
+                                        .arg(stripped_path.to_string_lossy().to_string())
                                         .spawn()
                                     {
                                         Ok(handle) => {}
@@ -439,6 +497,13 @@ impl App for TaskManager {
                                         }
                                     }
                                 }
+
+                                ui.separator();
+
+                                ui.label(format!(
+                                    "Parent PID: {}",
+                                    proc_attributes.process.th32ParentProcessID
+                                ));
                             });
 
                             proc_id.1.on_hover_text_at_pointer("Left click top copy");
