@@ -2,12 +2,16 @@ use std::{fmt::Display, path::PathBuf, time::Duration};
 
 use chrono::Local;
 use eframe::App;
-use egui::{vec2, Layout, Sense};
+use egui::{vec2, Sense};
 use egui_extras::{Column, TableBuilder};
 use task_manager::{
-    display_error_message, fetch_raw_string, get_priority_class_process, get_process_list, set_priority_class_process, terminate_process, ProcessAttributes
+    display_error_message, fetch_raw_string, get_priority_class_process, get_process_list,
+    set_priority_class_process, terminate_process, ProcessAttributes,
 };
-use windows::Win32::System::Threading::{ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS, IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, PROCESS_CREATION_FLAGS, REALTIME_PRIORITY_CLASS};
+use windows::Win32::System::Threading::{
+    ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS,
+    IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS,
+};
 
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum NameSearch {
@@ -264,7 +268,8 @@ impl App for TaskManager {
                         ui.allocate_space(vec2(0., 140.));
                     });
 
-                    if let Some(SortProcesses::Custom(inner_filter)) = self.sort_processes.as_mut() {
+                    if let Some(SortProcesses::Custom(inner_filter)) = self.sort_processes.as_mut()
+                    {
                         egui::ComboBox::from_id_source("name_search_type")
                             .selected_text(format!("{}", inner_filter.clone()))
                             .show_ui(ui, |ui| {
@@ -280,17 +285,17 @@ impl App for TaskManager {
                                 );
                             });
 
-                            match inner_filter {
-                                NameSearch::Pid(inner) => {
-                                    ui.text_edit_singleline(inner);
-                                },
-                                NameSearch::Name(inner) => {
-                                    ui.text_edit_singleline(inner);
-                                },
+                        match inner_filter {
+                            NameSearch::Pid(inner) => {
+                                ui.text_edit_singleline(inner);
                             }
-                    
-                    
-                            ui.allocate_space(vec2(1., 200.));}
+                            NameSearch::Name(inner) => {
+                                ui.text_edit_singleline(inner);
+                            }
+                        }
+
+                        ui.allocate_space(vec2(1., 200.));
+                    }
                 });
 
                 ui.label(format!(
@@ -306,10 +311,7 @@ impl App for TaskManager {
                 .resizable(true)
                 .auto_shrink([false, false])
                 .striped(true)
-                .columns(
-                    Column::remainder().at_most(ctx.available_rect().width()),
-                    5,
-                )
+                .columns(Column::remainder().at_most(ctx.available_rect().width()), 5)
                 .header(25., |mut row| {
                     //Main rows (ram usage, etc)
                     row.col(|ui| {
@@ -336,22 +338,22 @@ impl App for TaskManager {
                         let process_name = fetch_raw_string(proc_attributes.process.szExeFile);
 
                         //Check for process name, and if the process's name contains the filter
-                        if let Some(SortProcesses::Custom(sort_type)) = self.sort_processes.clone() {
+                        if let Some(SortProcesses::Custom(sort_type)) = self.sort_processes.clone()
+                        {
                             match sort_type {
                                 NameSearch::Pid(pid) => {
                                     if !proc_attributes
                                         .process
                                         .th32ProcessID
                                         .to_string()
-                                        .contains(&pid.trim())
+                                        .contains(pid.trim())
                                     {
                                         //Continue with next entry
                                         continue;
                                     }
-
                                 }
                                 NameSearch::Name(sort_name) => {
-                                    if !process_name.contains(&sort_name.trim()) {
+                                    if !process_name.contains(sort_name.trim()) {
                                         //Continue with next entry
                                         continue;
                                     }
@@ -506,44 +508,67 @@ impl App for TaskManager {
 
                                 //Set priorityy class
                                 ui.menu_button("Set priority class", |ui| {
-                                    if let Ok(priority) = get_priority_class_process(proc_attributes.process.th32ProcessID){
-                                        ui.label(format!("Current priority: {}", match dbg!(priority) {
-                                            REALTIME_PRIORITY_CLASS => "Realtime",
-                                            HIGH_PRIORITY_CLASS => "High",
-                                            ABOVE_NORMAL_PRIORITY_CLASS => "Above normal",
-                                            NORMAL_PRIORITY_CLASS => "Normal",
-                                            BELOW_NORMAL_PRIORITY_CLASS => "Below normal",
-                                            IDLE_PRIORITY_CLASS => "Idle",
-                                            _ => "Unknown"
-                                        }));
+                                    if let Ok(priority) = get_priority_class_process(
+                                        proc_attributes.process.th32ProcessID,
+                                    ) {
+                                        ui.label(format!(
+                                            "Current priority: {}",
+                                            match priority {
+                                                REALTIME_PRIORITY_CLASS => "Realtime",
+                                                HIGH_PRIORITY_CLASS => "High",
+                                                ABOVE_NORMAL_PRIORITY_CLASS => "Above normal",
+                                                NORMAL_PRIORITY_CLASS => "Normal",
+                                                BELOW_NORMAL_PRIORITY_CLASS => "Below normal",
+                                                IDLE_PRIORITY_CLASS => "Idle",
+                                                _ => "Unknown",
+                                            }
+                                        ));
                                     }
                                     if ui.button("Idle").clicked() {
-                                        if let Err(err) = set_priority_class_process(proc_attributes.process.th32ProcessID, IDLE_PRIORITY_CLASS) {
+                                        if let Err(err) = set_priority_class_process(
+                                            proc_attributes.process.th32ProcessID,
+                                            IDLE_PRIORITY_CLASS,
+                                        ) {
                                             display_error_message(err, "Error");
                                         }
                                     };
                                     if ui.button("Below normal").clicked() {
-                                        if let Err(err) = set_priority_class_process(proc_attributes.process.th32ProcessID, BELOW_NORMAL_PRIORITY_CLASS) {
+                                        if let Err(err) = set_priority_class_process(
+                                            proc_attributes.process.th32ProcessID,
+                                            BELOW_NORMAL_PRIORITY_CLASS,
+                                        ) {
                                             display_error_message(err, "Error");
                                         }
                                     };
                                     if ui.button("Normal").clicked() {
-                                        if let Err(err) = set_priority_class_process(proc_attributes.process.th32ProcessID, NORMAL_PRIORITY_CLASS) {
+                                        if let Err(err) = set_priority_class_process(
+                                            proc_attributes.process.th32ProcessID,
+                                            NORMAL_PRIORITY_CLASS,
+                                        ) {
                                             display_error_message(err, "Error");
                                         }
                                     };
                                     if ui.button("Above normal").clicked() {
-                                        if let Err(err) = set_priority_class_process(proc_attributes.process.th32ProcessID, ABOVE_NORMAL_PRIORITY_CLASS) {
+                                        if let Err(err) = set_priority_class_process(
+                                            proc_attributes.process.th32ProcessID,
+                                            ABOVE_NORMAL_PRIORITY_CLASS,
+                                        ) {
                                             display_error_message(err, "Error");
                                         }
                                     };
                                     if ui.button("High").clicked() {
-                                        if let Err(err) = set_priority_class_process(proc_attributes.process.th32ProcessID, HIGH_PRIORITY_CLASS) {
+                                        if let Err(err) = set_priority_class_process(
+                                            proc_attributes.process.th32ProcessID,
+                                            HIGH_PRIORITY_CLASS,
+                                        ) {
                                             display_error_message(err, "Error");
                                         }
                                     };
                                     if ui.button("Realtime (Administrator privileges)").clicked() {
-                                        if let Err(err) = set_priority_class_process(proc_attributes.process.th32ProcessID, REALTIME_PRIORITY_CLASS) {
+                                        if let Err(err) = set_priority_class_process(
+                                            proc_attributes.process.th32ProcessID,
+                                            REALTIME_PRIORITY_CLASS,
+                                        ) {
                                             display_error_message(err, "Error");
                                         }
                                     };
