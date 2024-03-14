@@ -12,7 +12,7 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
 use windows::Win32::System::Threading::{
-    GetProcessTimes, OpenProcess, TerminateProcess, PROCESS_ALL_ACCESS,
+    GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass, TerminateProcess, HIGH_PRIORITY_CLASS, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS
 };
 use windows::{
     core::PCWSTR,
@@ -117,7 +117,7 @@ fn filetime_to_duration(f: &FILETIME) -> Duration {
 
 fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes>> {
     let mut proc_attr_list: Vec<ProcessAttributes> = Vec::new();
-
+    
     unsafe {
         let mut pe32 = alloc_proc_entry();
         let mut me32 = MODULEENTRY32W::default();
@@ -245,4 +245,30 @@ pub fn terminate_process(pid: u32) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+pub fn set_priority_class_process(pid: u32, priority: PROCESS_CREATION_FLAGS) -> anyhow::Result<()> {
+    unsafe
+    {
+        let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
+
+        SetPriorityClass(process_handle, priority)?;
+
+        CloseHandle(process_handle)?;
+    }
+
+    Ok(())
+}
+
+pub fn get_priority_class_process(pid: u32) -> anyhow::Result<PROCESS_CREATION_FLAGS> {
+    unsafe
+    {
+        let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
+
+        let priority = GetPriorityClass(process_handle);
+
+        CloseHandle(process_handle)?;
+
+        return Ok(PROCESS_CREATION_FLAGS(priority));
+    }
 }
