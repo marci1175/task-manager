@@ -343,13 +343,15 @@ impl App for TaskManager {
                                         .to_string()
                                         .contains(&pid.trim())
                                     {
-                                        return;
+                                        //Continue with next entry
+                                        continue;
                                     }
 
                                 }
                                 NameSearch::Name(sort_name) => {
                                     if !process_name.contains(&sort_name.trim()) {
-                                        return;
+                                        //Continue with next entry
+                                        continue;
                                     }
                                 }
                             }
