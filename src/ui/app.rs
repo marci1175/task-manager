@@ -4,9 +4,10 @@ use chrono::Local;
 use eframe::App;
 use egui::{vec2, Sense};
 use egui_extras::{Column, TableBuilder};
+use rfd::FileDialog;
 use task_manager::{
     display_error_message, fetch_raw_string, get_priority_class_process, get_process_list,
-    set_priority_class_process, terminate_process, ProcessAttributes,
+    inject_dll_into_process, set_priority_class_process, terminate_process, ProcessAttributes,
 };
 use windows::Win32::System::Threading::{
     ABOVE_NORMAL_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS,
@@ -573,6 +574,21 @@ impl App for TaskManager {
                                         }
                                     };
                                 });
+
+                                ui.separator();
+
+                                if ui.button("Inject DLL").clicked() {
+                                    let path_to_dll = FileDialog::new()
+                                        .set_title("Select DLL")
+                                        .add_filter("Dynamic load library", &["dll"])
+                                        .pick_file();
+
+                                    if let Some(path) = path_to_dll {
+                                        if let Err(err) = inject_dll_into_process(proc_attributes.process.th32ProcessID, path) {
+                                            display_error_message(err, "Error");
+                                        };
+                                    }
+                                };
 
                                 ui.separator();
 

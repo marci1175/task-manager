@@ -1,22 +1,28 @@
 use std::fmt::Display;
+use std::fs;
 use std::mem::{self, size_of};
+use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
+use std::ptr::null_mut;
 use std::str::FromStr;
 use std::time::Duration;
 
 use winapi::um::winnt::ULARGE_INTEGER;
+use windows::core::HSTRING;
 use windows::Win32::Foundation::{CloseHandle, FILETIME};
+use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Module32FirstW, MODULEENTRY32W, TH32CS_SNAPALL, TH32CS_SNAPMODULE,
     TH32CS_SNAPMODULE32,
 };
+use windows::Win32::System::LibraryLoader::{self, GetModuleHandleW, GetProcAddress, LoadLibraryW};
+use windows::Win32::System::Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
 use windows::Win32::System::Threading::{
-    GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass, TerminateProcess,
-    PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS,
+    CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass, TerminateProcess, NORMAL_PRIORITY_CLASS, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS
 };
 use windows::{
-    core::PCWSTR,
+    core::{PCWSTR, PCSTR},
     Win32::{
         Foundation::HANDLE,
         System::{
@@ -273,4 +279,38 @@ pub fn get_priority_class_process(pid: u32) -> anyhow::Result<PROCESS_CREATION_F
 
         Ok(PROCESS_CREATION_FLAGS(priority))
     }
+}
+
+pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result<()> {
+    let dll = fs::read(&path_to_dll)?;
+    dbg!(&path_to_dll);
+    unsafe {
+        let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
+
+        let allocated_address = VirtualAllocEx(process_handle, None, dll.len(), MEM_COMMIT, PAGE_EXECUTE_READ);
+        
+        // WriteProcessMemory(process_handle, allocated_address, lpbuffer, nsize, None);
+
+        let lib_name = path_to_dll.as_os_str().encode_wide().into_iter().collect::<Vec<_>>();
+
+        let hstring = HSTRING::from_wide(&lib_name)?;
+
+        let pcwstr = PCWSTR::from_raw(hstring.as_ptr());
+
+        //Load module
+        //Module not found
+        let lib = LoadLibraryW(pcwstr)?;
+
+        //Write process memory
+        WriteProcessMemory(process_handle, allocated_address, dll.as_ptr() as *const _, dll.len(), None)?;
+
+        let proc_address = GetProcAddress(lib, PCSTR::from_raw("LoadLibraryW\0".as_ptr()));
+
+        //https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
+        let remote_thread = CreateRemoteThread(process_handle, None, 0, Some(std::mem::transmute(proc_address)), Some(allocated_address), 0, None)?;
+        
+        CloseHandle(process_handle)?;
+    }
+
+    Ok(())
 }
