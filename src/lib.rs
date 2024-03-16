@@ -3,7 +3,6 @@ use std::fs;
 use std::mem::{self, size_of};
 use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
-use std::ptr::null_mut;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -15,12 +14,12 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Module32FirstW, MODULEENTRY32W, TH32CS_SNAPALL, TH32CS_SNAPMODULE,
     TH32CS_SNAPMODULE32,
 };
-use windows::Win32::System::LibraryLoader::{self, GetModuleHandleW, GetProcAddress, LoadLibraryW};
+use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::System::Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
 use windows::Win32::System::Threading::{
     CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass,
-    TerminateProcess, NORMAL_PRIORITY_CLASS, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS,
+    TerminateProcess, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS,
 };
 use windows::{
     core::{PCSTR, PCWSTR},
@@ -298,11 +297,7 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
 
         // WriteProcessMemory(process_handle, allocated_address, lpbuffer, nsize, None);
 
-        let lib_name = path_to_dll
-            .as_os_str()
-            .encode_wide()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let lib_name = path_to_dll.as_os_str().encode_wide().collect::<Vec<_>>();
 
         let hstring = HSTRING::from_wide(&lib_name)?;
 

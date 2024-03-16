@@ -233,7 +233,6 @@ impl App for TaskManager {
 
                         ui.allocate_space(vec2(0., 140.));
                     });
-
                 });
 
                 ui.label(format!(
@@ -244,7 +243,7 @@ impl App for TaskManager {
 
                 ui.add(
                     egui::TextEdit::singleline(&mut self.string_buffer_search)
-                        .hint_text("Start typing PID or process name")   
+                        .hint_text("Start typing PID or process name"),
                 );
             });
         });
@@ -285,8 +284,8 @@ impl App for TaskManager {
                             .process
                             .th32ProcessID
                             .to_string()
-                            .contains(&self.string_buffer_search.trim())
-                            && !process_name.contains(&self.string_buffer_search.trim())
+                            .contains(self.string_buffer_search.trim())
+                            && !process_name.contains(self.string_buffer_search.trim())
                         {
                             //Continue with next entry
                             continue;
