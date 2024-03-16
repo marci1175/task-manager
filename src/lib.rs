@@ -19,10 +19,11 @@ use windows::Win32::System::LibraryLoader::{self, GetModuleHandleW, GetProcAddre
 use windows::Win32::System::Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
 use windows::Win32::System::Threading::{
-    CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass, TerminateProcess, NORMAL_PRIORITY_CLASS, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS
+    CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass,
+    TerminateProcess, NORMAL_PRIORITY_CLASS, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS,
 };
 use windows::{
-    core::{PCWSTR, PCSTR},
+    core::{PCSTR, PCWSTR},
     Win32::{
         Foundation::HANDLE,
         System::{
@@ -287,11 +288,21 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
     unsafe {
         let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
 
-        let allocated_address = VirtualAllocEx(process_handle, None, dll.len(), MEM_COMMIT, PAGE_EXECUTE_READ);
-        
+        let allocated_address = VirtualAllocEx(
+            process_handle,
+            None,
+            dll.len(),
+            MEM_COMMIT,
+            PAGE_EXECUTE_READ,
+        );
+
         // WriteProcessMemory(process_handle, allocated_address, lpbuffer, nsize, None);
 
-        let lib_name = path_to_dll.as_os_str().encode_wide().into_iter().collect::<Vec<_>>();
+        let lib_name = path_to_dll
+            .as_os_str()
+            .encode_wide()
+            .into_iter()
+            .collect::<Vec<_>>();
 
         let hstring = HSTRING::from_wide(&lib_name)?;
 
@@ -302,13 +313,27 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
         let lib = LoadLibraryW(pcwstr)?;
 
         //Write process memory
-        WriteProcessMemory(process_handle, allocated_address, dll.as_ptr() as *const _, dll.len(), None)?;
+        WriteProcessMemory(
+            process_handle,
+            allocated_address,
+            dll.as_ptr() as *const _,
+            dll.len(),
+            None,
+        )?;
 
         let proc_address = GetProcAddress(lib, PCSTR::from_raw("LoadLibraryW\0".as_ptr()));
 
         //https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
-        let remote_thread = CreateRemoteThread(process_handle, None, 0, Some(std::mem::transmute(proc_address)), Some(allocated_address), 0, None)?;
-        
+        let remote_thread = CreateRemoteThread(
+            process_handle,
+            None,
+            0,
+            Some(std::mem::transmute(proc_address)),
+            Some(allocated_address),
+            0,
+            None,
+        )?;
+
         CloseHandle(process_handle)?;
     }
 

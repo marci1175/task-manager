@@ -14,24 +14,8 @@ use windows::Win32::System::Threading::{
     IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS,
 };
 
-#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
-pub enum NameSearch {
-    Pid(String),
-    Name(String),
-}
-
-impl Display for NameSearch {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            NameSearch::Name(_) => "Name",
-            NameSearch::Pid(_) => "Process ID",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum SortProcesses {
-    Custom(NameSearch),
     CpuUsage,
     RamUsage,
     DriveUsage,
@@ -41,7 +25,6 @@ pub enum SortProcesses {
 impl Display for SortProcesses {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            SortProcesses::Custom(_) => "Custom",
             SortProcesses::CpuUsage => "CPU usage",
             SortProcesses::RamUsage => "RAM usage",
             SortProcesses::DriveUsage => "Drive usage",
@@ -83,7 +66,7 @@ pub struct TaskManager {
     #[serde(skip)]
     sort_processes: Option<SortProcesses>,
 
-    name_search_type: NameSearch,
+    string_buffer_search: String,
 
     memory_unit: Unit,
 }
@@ -115,11 +98,6 @@ impl TaskManager {
 
                 //filter / sort depending on SortProcesses (self.sort_processes) else just load in the raw proc list
                 if let Some(sort_by) = self.sort_processes.clone() {
-                    if matches!(sort_by, SortProcesses::Custom(_)) {
-                        self.current_process_list = proc_list;
-                        return;
-                    }
-
                     self.filter_processes(sort_by);
                 } else {
                     self.current_process_list = proc_list;
@@ -134,9 +112,6 @@ impl TaskManager {
 
     fn filter_processes(&mut self, filter: SortProcesses) {
         match filter {
-            SortProcesses::Custom(_) => {
-                //We dont have to do anything here, cuz we dont need to alter the main vector, as that would be costly
-            }
             SortProcesses::CpuUsage => {
                 self.current_process_list
                     .sort_by_key(|key| key.processor_usage.floor() as i64);
@@ -170,7 +145,7 @@ impl Default for TaskManager {
             processor_usage: 0.,
 
             sort_processes: None,
-            name_search_type: NameSearch::Name(String::new()),
+            string_buffer_search: String::new(),
             memory_unit: Unit::MB,
         }
     }
@@ -204,11 +179,11 @@ impl App for TaskManager {
                     });
                 });
 
-                ui.menu_button("Search", |ui| {
+                ui.menu_button("Sort", |ui| {
                     ui.horizontal(|ui| {
-                        ui.label("Search parameters");
+                        ui.label("Sort parameters");
 
-                        let search = egui::ComboBox::from_id_source("Search")
+                        let search = egui::ComboBox::from_id_source("Sort")
                             .selected_text({
                                 if let Some(search_parameter) = &self.sort_processes {
                                     format!("{}", search_parameter)
@@ -224,16 +199,6 @@ impl App for TaskManager {
                                             &mut self.sort_processes,
                                             Some(SortProcesses::CpuUsage),
                                             "CPU Usage",
-                                        )
-                                        .clicked()
-                                    || ui
-                                        .selectable_value(
-                                            &mut self.sort_processes,
-                                            Some(SortProcesses::Custom(
-                                                //Default value when clicking custom search filter
-                                                NameSearch::Name(String::new()),
-                                            )),
-                                            "Custom",
                                         )
                                         .clicked()
                                     || ui
@@ -269,34 +234,6 @@ impl App for TaskManager {
                         ui.allocate_space(vec2(0., 140.));
                     });
 
-                    if let Some(SortProcesses::Custom(inner_filter)) = self.sort_processes.as_mut()
-                    {
-                        egui::ComboBox::from_id_source("name_search_type")
-                            .selected_text(format!("{}", inner_filter.clone()))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    inner_filter,
-                                    NameSearch::Name(String::new()),
-                                    "Name",
-                                );
-                                ui.selectable_value(
-                                    inner_filter,
-                                    NameSearch::Pid(String::new()),
-                                    "Process ID",
-                                );
-                            });
-
-                        match inner_filter {
-                            NameSearch::Pid(inner) => {
-                                ui.text_edit_singleline(inner);
-                            }
-                            NameSearch::Name(inner) => {
-                                ui.text_edit_singleline(inner);
-                            }
-                        }
-
-                        ui.allocate_space(vec2(1., 200.));
-                    }
                 });
 
                 ui.label(format!(
@@ -304,6 +241,11 @@ impl App for TaskManager {
                     self.current_process_list.len(),
                     self.processor_usage
                 ));
+
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.string_buffer_search)
+                        .hint_text("Start typing PID or process name")   
+                );
             });
         });
 
@@ -339,27 +281,15 @@ impl App for TaskManager {
                         let process_name = fetch_raw_string(proc_attributes.process.szExeFile);
 
                         //Check for process name, and if the process's name contains the filter
-                        if let Some(SortProcesses::Custom(sort_type)) = self.sort_processes.clone()
+                        if !proc_attributes
+                            .process
+                            .th32ProcessID
+                            .to_string()
+                            .contains(&self.string_buffer_search.trim())
+                            && !process_name.contains(&self.string_buffer_search.trim())
                         {
-                            match sort_type {
-                                NameSearch::Pid(pid) => {
-                                    if !proc_attributes
-                                        .process
-                                        .th32ProcessID
-                                        .to_string()
-                                        .contains(pid.trim())
-                                    {
-                                        //Continue with next entry
-                                        continue;
-                                    }
-                                }
-                                NameSearch::Name(sort_name) => {
-                                    if !process_name.contains(sort_name.trim()) {
-                                        //Continue with next entry
-                                        continue;
-                                    }
-                                }
-                            }
+                            //Continue with next entry
+                            continue;
                         }
 
                         //Create row
@@ -584,7 +514,10 @@ impl App for TaskManager {
                                         .pick_file();
 
                                     if let Some(path) = path_to_dll {
-                                        if let Err(err) = inject_dll_into_process(proc_attributes.process.th32ProcessID, path) {
+                                        if let Err(err) = inject_dll_into_process(
+                                            proc_attributes.process.th32ProcessID,
+                                            path,
+                                        ) {
                                             display_error_message(err, "Error");
                                         };
                                     }
