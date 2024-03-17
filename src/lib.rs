@@ -1,10 +1,4 @@
-use std::fmt::Display;
-use std::fs;
-use std::mem::{self, size_of};
-use std::os::windows::ffi::OsStrExt;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{fmt::Display, fs, mem::{self, size_of}, os::windows::ffi::OsStrExt, path::PathBuf, str::FromStr, time::Duration};
 
 use winapi::um::winnt::ULARGE_INTEGER;
 use windows::core::HSTRING;
