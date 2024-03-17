@@ -319,6 +319,8 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
         // let proc_address = GetProcAddress(lib, PCSTR::from_raw("LoadLibraryW\0".as_ptr()));
 
         //LPTHREAD_START_ROUTINE -> ENTRY ADDRESS FOR THE NEW THREAD
+        //https://learn.microsoft.com/en-us/dotnet/framework/unmanaged-api/hosting/lpthread-start-routine-function-pointer
+
         //https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
         let remote_thread = CreateRemoteThread(
             process_handle,
