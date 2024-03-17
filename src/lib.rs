@@ -272,7 +272,9 @@ pub fn check_administrator_permis() {
 
 }
 
-
+pub fn elevate_permission() -> anyhow::Result<()> {
+    Ok(())
+}
 
 pub fn set_priority_class_process(
     pid: u32,
