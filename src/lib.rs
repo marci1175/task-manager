@@ -159,8 +159,8 @@ fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes
                         me32,
                     ));
                 }
-                Err(err) => {
-                    // dbg!(err);
+                Err(_err) => {
+                    // dbg!(_err);
                 }
             };
         }
