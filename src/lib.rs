@@ -7,29 +7,29 @@ use std::{
     str::FromStr,
     time::Duration,
 };
-
+use winapi::um::winnt::ULARGE_INTEGER;
 use windows::{
     core::HSTRING,
     Win32::{
         Foundation::{CloseHandle, FILETIME},
-        System::Diagnostics::{
-            Debug::WriteProcessMemory,
-            ToolHelp::{
-                CreateToolhelp32Snapshot, Module32FirstW, MODULEENTRY32W, TH32CS_SNAPALL,
-                TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+        System::{
+            Diagnostics::{
+                Debug::WriteProcessMemory,
+                ToolHelp::{
+                    CreateToolhelp32Snapshot, Module32FirstW, MODULEENTRY32W, TH32CS_SNAPALL,
+                    TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+                },
+            },
+            LibraryLoader::{GetProcAddress, LoadLibraryW},
+            Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ},
+            ProcessStatus::GetProcessMemoryInfo,
+            Threading::{
+                CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess,
+                SetPriorityClass, TerminateProcess, LPTHREAD_START_ROUTINE, PROCESS_ALL_ACCESS,
+                PROCESS_CREATION_FLAGS,
             },
         },
     },
-};
-
-use winapi::um::winnt::ULARGE_INTEGER;
-
-use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
-use windows::Win32::System::Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ};
-use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
-use windows::Win32::System::Threading::{
-    CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass,
-    TerminateProcess, LPTHREAD_START_ROUTINE, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS,
 };
 use windows::{
     core::PCWSTR,
