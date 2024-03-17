@@ -26,7 +26,7 @@ use windows::{
             Threading::{
                 CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess,
                 SetPriorityClass, TerminateProcess, LPTHREAD_START_ROUTINE, PROCESS_ALL_ACCESS,
-                PROCESS_CREATION_FLAGS,
+                PROCESS_CREATION_FLAGS, REALTIME_PRIORITY_CLASS,
             },
         },
     },
@@ -268,11 +268,23 @@ pub fn terminate_process(pid: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn check_administrator_permis() {
+
+}
+
+
+
 pub fn set_priority_class_process(
     pid: u32,
     priority: PROCESS_CREATION_FLAGS,
 ) -> anyhow::Result<()> {
     unsafe {
+
+        //Check admin priviliges if we want to set it to realtime
+        if priority == REALTIME_PRIORITY_CLASS {
+
+        }
+
         //Open process
         let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
 
