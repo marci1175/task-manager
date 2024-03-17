@@ -294,6 +294,7 @@ impl App for TaskManager {
                         //Create row
                         body.row(25., |mut row| {
                             let row_index = row.col_index();
+                            
                             //proc_name
                             let proc_name = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
