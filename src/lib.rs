@@ -297,6 +297,7 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
 
         // WriteProcessMemory(process_handle, allocated_address, lpbuffer, nsize, None);
 
+        //PATHbuf to PCWSTR <- RETARD
         let lib_name = path_to_dll.as_os_str().encode_wide().collect::<Vec<_>>();
 
         let hstring = HSTRING::from_wide(&lib_name)?;
@@ -305,9 +306,11 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
 
         //Load module
         //Module not found
+        //https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryw
         let lib = LoadLibraryW(pcwstr)?;
 
         //Write process memory
+        //https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory
         WriteProcessMemory(
             process_handle,
             allocated_address,
