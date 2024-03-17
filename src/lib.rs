@@ -244,6 +244,7 @@ pub fn fetch_proc_path(proc_path_raw: [u16; 260]) -> PathBuf {
 
 pub fn terminate_process(pid: u32) -> anyhow::Result<()> {
     unsafe {
+        //Open process
         let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
 
         TerminateProcess(process_handle, 0)?;
@@ -259,6 +260,7 @@ pub fn set_priority_class_process(
     priority: PROCESS_CREATION_FLAGS,
 ) -> anyhow::Result<()> {
     unsafe {
+        //Open process
         let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
 
         SetPriorityClass(process_handle, priority)?;
@@ -271,6 +273,7 @@ pub fn set_priority_class_process(
 
 pub fn get_priority_class_process(pid: u32) -> anyhow::Result<PROCESS_CREATION_FLAGS> {
     unsafe {
+        //Open process
         let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
 
         let priority = GetPriorityClass(process_handle);
@@ -285,8 +288,10 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
     let dll = fs::read(&path_to_dll)?;
     dbg!(&path_to_dll);
     unsafe {
+        //Open process
         let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
 
+        //Allocate in process
         let allocated_address = VirtualAllocEx(
             process_handle,
             None,
@@ -294,8 +299,6 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
             MEM_COMMIT,
             PAGE_EXECUTE_READ,
         );
-
-        // WriteProcessMemory(process_handle, allocated_address, lpbuffer, nsize, None);
 
         //PATHbuf to PCWSTR <- RETARD
         let lib_name = path_to_dll.as_os_str().encode_wide().collect::<Vec<_>>();
