@@ -538,7 +538,7 @@ impl App for TaskManager {
                 });
         });
 
-        //Check for processes
+        //Check for processes, when timer ended
         if self.last_check.elapsed() > Duration::from_secs(self.update_frequency) {
             self.extract_processes();
         }
@@ -551,3 +551,5 @@ impl App for TaskManager {
         eframe::set_value(storage, eframe::APP_KEY, self);
     }
 }
+
+//1000 COMMITS 2024.03.17 21:32
