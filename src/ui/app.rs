@@ -294,7 +294,7 @@ impl App for TaskManager {
                         //Create row
                         body.row(25., |mut row| {
                             let row_index = row.col_index();
-                            
+
                             //proc_name
                             let proc_name = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
@@ -389,10 +389,6 @@ impl App for TaskManager {
                             }
 
                             proc_name.1.context_menu(|ui| {
-                                ui.label("Process settings");
-
-                                ui.separator();
-
                                 if ui.button("Terminate process").clicked() {
                                     if let Err(err) =
                                         terminate_process(proc_attributes.process.th32ProcessID)
