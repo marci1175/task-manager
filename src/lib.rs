@@ -22,7 +22,7 @@ use windows::Win32::System::Threading::{
     TerminateProcess, LPTHREAD_START_ROUTINE, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS,
 };
 use windows::{
-    core::{PCSTR, PCWSTR},
+    core::PCWSTR,
     Win32::{
         Foundation::HANDLE,
         System::{
