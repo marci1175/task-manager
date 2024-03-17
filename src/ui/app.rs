@@ -165,7 +165,7 @@ impl App for TaskManager {
                     ui.horizontal(|ui| {
                         ui.label("Memory unit");
 
-                        let combobox = egui::ComboBox::from_id_source("Memory unit")
+                        let _combobox = egui::ComboBox::from_id_source("Memory unit")
                             .selected_text(format!("{:?}", self.memory_unit))
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(&mut self.memory_unit, Unit::B, "B");
@@ -427,7 +427,7 @@ impl App for TaskManager {
                                         .arg(stripped_path.to_string_lossy().to_string())
                                         .spawn()
                                     {
-                                        Ok(handle) => {}
+                                        Ok(_) => {}
                                         Err(err) => {
                                             display_error_message(err, "Error");
                                         }
