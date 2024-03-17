@@ -1,12 +1,26 @@
-use std::{fmt::Display, fs, mem::{self, size_of}, os::windows::ffi::OsStrExt, path::PathBuf, str::FromStr, time::Duration};
+use std::{
+    fmt::Display,
+    fs,
+    mem::{self, size_of},
+    os::windows::ffi::OsStrExt,
+    path::PathBuf,
+    str::FromStr,
+    time::Duration,
+};
 
-use windows::{core::HSTRING, Win32::{Foundation::{CloseHandle, FILETIME}, System::Diagnostics::{
-    Debug::WriteProcessMemory,
-    ToolHelp::{
-        CreateToolhelp32Snapshot, Module32FirstW, MODULEENTRY32W, TH32CS_SNAPALL, TH32CS_SNAPMODULE,
-        TH32CS_SNAPMODULE32,
+use windows::{
+    core::HSTRING,
+    Win32::{
+        Foundation::{CloseHandle, FILETIME},
+        System::Diagnostics::{
+            Debug::WriteProcessMemory,
+            ToolHelp::{
+                CreateToolhelp32Snapshot, Module32FirstW, MODULEENTRY32W, TH32CS_SNAPALL,
+                TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+            },
+        },
     },
-}}};
+};
 
 use winapi::um::winnt::ULARGE_INTEGER;
 
