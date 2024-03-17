@@ -11,6 +11,7 @@ fn main() -> anyhow::Result<(), Box<dyn std::error::Error>> {
         "Task Manager",
         {
             NativeOptions {
+                
                 ..Default::default()
             }
         },
