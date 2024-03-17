@@ -18,8 +18,7 @@ use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::System::Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ};
 use windows::Win32::System::ProcessStatus::GetProcessMemoryInfo;
 use windows::Win32::System::Threading::{
-    CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass,
-    TerminateProcess, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS,
+    CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass, TerminateProcess, LPTHREAD_START_ROUTINE, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS
 };
 use windows::{
     core::{PCSTR, PCWSTR},
@@ -329,6 +328,8 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
             None,
         )?;
 
+        // let _: LPTHREAD_START_ROUTINE = std::mem::transmute(allocated_address);
+        
         CloseHandle(process_handle)?;
     }
 
