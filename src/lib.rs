@@ -137,7 +137,7 @@ fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes
 
     unsafe {
         let mut pe32 = alloc_proc_entry();
-        
+
         //We disable this warning because its supposed to be overwritten
         #[allow(unused_assignments)]
         let mut me32 = MODULEENTRY32W::default();
@@ -269,14 +269,13 @@ pub fn terminate_process(pid: u32) -> anyhow::Result<()> {
 }
 
 pub fn check_administrator_permis() -> anyhow::Result<()> {
-    
     let admin_permissions = true;
 
     if admin_permissions {
         elevate_permission()?;
     }
-    
-    Ok(()) 
+
+    Ok(())
 }
 
 pub fn elevate_permission() -> anyhow::Result<()> {
@@ -288,7 +287,6 @@ pub fn set_priority_class_process(
     priority: PROCESS_CREATION_FLAGS,
 ) -> anyhow::Result<()> {
     unsafe {
-
         //Check admin priviliges if we want to set it to realtime
         if priority == REALTIME_PRIORITY_CLASS {
             check_administrator_permis()?;

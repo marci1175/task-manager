@@ -544,7 +544,7 @@ impl App for TaskManager {
         if self.last_check.elapsed() > Duration::from_secs(self.update_frequency) {
             self.extract_processes();
         }
-        
+
         ctx.request_repaint();
     }
 
