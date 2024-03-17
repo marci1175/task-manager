@@ -268,8 +268,15 @@ pub fn terminate_process(pid: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn check_administrator_permis() {
+pub fn check_administrator_permis() -> anyhow::Result<()> {
+    
+    let admin_permissions = true;
 
+    if admin_permissions {
+        elevate_permission()?;
+    }
+    
+    Ok(()) 
 }
 
 pub fn elevate_permission() -> anyhow::Result<()> {
@@ -284,7 +291,7 @@ pub fn set_priority_class_process(
 
         //Check admin priviliges if we want to set it to realtime
         if priority == REALTIME_PRIORITY_CLASS {
-
+            check_administrator_permis()?;
         }
 
         //Open process
