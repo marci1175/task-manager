@@ -541,8 +541,6 @@ impl App for TaskManager {
                                 println!("Fasz!");
                             }
                         });
-
-                        dbg!(body.ui_mut().ui_contains_pointer());
                     }
                 });
         });
