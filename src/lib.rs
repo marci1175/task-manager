@@ -139,7 +139,7 @@ fn get_proc_attr_list(hsnapshot: HANDLE) -> anyhow::Result<Vec<ProcessAttributes
         let mut pe32 = alloc_proc_entry();
         
         //We disable this warning because its supposed to be overwritten
-        #[warn(unused_assignments)]
+        #[allow(unused_assignments)]
         let mut me32 = MODULEENTRY32W::default();
 
         while Process32NextW(hsnapshot, &mut pe32).is_ok() {
