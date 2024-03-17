@@ -304,7 +304,7 @@ impl App for TaskManager {
                                 self.biggest_col_height = proc_name.0.height()
                             };
 
-                            //processor usage DONT TOUCH
+                            //processor usage DO TOUCH
                             let proc_usage = row.col(|ui| {
                                 ui.horizontal_centered(|ui| {
                                     if let Some(last_proc_list) = self.last_process_list.get(index)
