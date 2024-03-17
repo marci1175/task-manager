@@ -2,7 +2,7 @@ use std::{fmt::Display, path::PathBuf, time::Duration};
 
 use chrono::Local;
 use eframe::App;
-use egui::{vec2, Sense};
+use egui::vec2;
 use egui_extras::{Column, TableBuilder};
 use rfd::FileDialog;
 use task_manager::{
