@@ -535,11 +535,6 @@ impl App for TaskManager {
                             proc_name
                                 .1
                                 .on_hover_text_at_pointer("Right click for more options");
-
-                            //returns response
-                            if row.response().interact(Sense::click()).clicked() {
-                                println!("Fasz!");
-                            }
                         });
                     }
                 });
