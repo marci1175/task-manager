@@ -9,9 +9,9 @@ use std::{
 };
 use winapi::um::winnt::ULARGE_INTEGER;
 use windows::{
-    core::HSTRING,
+    core::{HSTRING, PCSTR},
     Win32::{
-        Foundation::{CloseHandle, FILETIME},
+        Foundation::{CloseHandle, FILETIME, HMODULE},
         System::{
             Diagnostics::{
                 Debug::WriteProcessMemory,
@@ -20,8 +20,8 @@ use windows::{
                     TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
                 },
             },
-            LibraryLoader::LoadLibraryW,
-            Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ},
+            LibraryLoader::{GetModuleHandleW, GetProcAddress, LoadLibraryW},
+            Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE},
             ProcessStatus::GetProcessMemoryInfo,
             Threading::{
                 CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess,
@@ -318,7 +318,6 @@ pub fn get_priority_class_process(pid: u32) -> anyhow::Result<PROCESS_CREATION_F
 
 pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result<()> {
     let dll = fs::read(&path_to_dll)?;
-    dbg!(&path_to_dll);
     unsafe {
         //Open process
         let process_handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)?;
@@ -329,7 +328,7 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
             None,
             dll.len(),
             MEM_COMMIT,
-            PAGE_EXECUTE_READ,
+            PAGE_EXECUTE_READWRITE,
         );
 
         //PATHbuf to PCWSTR <- RETARD
@@ -342,7 +341,7 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
         //Load module
         //Module not found
         //https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryw
-        let lib = LoadLibraryW(pcwstr)?;
+        // let lib = LoadLibraryW(pcwstr)?;
 
         //Write process memory
         //https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory
@@ -358,13 +357,20 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
 
         //LPTHREAD_START_ROUTINE -> ENTRY ADDRESS FOR THE NEW THREAD
         //https://learn.microsoft.com/en-us/dotnet/framework/unmanaged-api/hosting/lpthread-start-routine-function-pointer
+        
+        //I dont know why I have to these two but game is game
+        let kernel32 = PCWSTR::from_raw(HSTRING::from("kernel32.dll").as_ptr() as *const _);
+        let loadlibraryw = PCSTR::from_raw(HSTRING::from("LoadLibraryW").as_ptr() as *const _);
+
+        //Start address of the executing function
+        let addr_loadlibw = GetProcAddress(GetModuleHandleW(kernel32)?, loadlibraryw);
 
         //https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread
         let remote_thread = CreateRemoteThread(
             process_handle,
             None,
             0,
-            Some(std::mem::transmute(allocated_address)),
+            Some(std::mem::transmute(addr_loadlibw)),
             Some(allocated_address),
             0,
             None,
