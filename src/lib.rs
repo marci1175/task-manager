@@ -24,9 +24,7 @@ use windows::{
             Memory::{VirtualAllocEx, MEM_COMMIT, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE},
             ProcessStatus::GetProcessMemoryInfo,
             Threading::{
-                CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess,
-                SetPriorityClass, TerminateProcess, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS,
-                REALTIME_PRIORITY_CLASS,
+                CreateRemoteThread, GetPriorityClass, GetProcessTimes, OpenProcess, SetPriorityClass, TerminateProcess, LPTHREAD_START_ROUTINE, PROCESS_ALL_ACCESS, PROCESS_CREATION_FLAGS, REALTIME_PRIORITY_CLASS
             },
         },
     },
@@ -377,7 +375,6 @@ pub fn inject_dll_into_process(pid: u32, path_to_dll: PathBuf) -> anyhow::Result
         )?;
 
         // let _: LPTHREAD_START_ROUTINE = std::mem::transmute(allocated_address);
-
         CloseHandle(process_handle)?;
     }
 
